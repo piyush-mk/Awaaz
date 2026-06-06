@@ -63,6 +63,13 @@ export async function confirmBill(items, grandTotal) {
   })
 }
 
+// Photo Inventory
+export async function parsePhoto(imageFile) {
+  const form = new FormData()
+  form.append('image', imageFile)
+  return request('/photo/parse', { method: 'POST', body: form })
+}
+
 // Dashboard
 export async function getDashboard() {
   return request('/dashboard')

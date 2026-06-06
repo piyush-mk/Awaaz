@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
 from models import Base
-from routers import voice, inventory, billing, dashboard
+from routers import voice, inventory, billing, dashboard, photo
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,7 @@ app.include_router(voice.router, prefix="/api/voice", tags=["Voice AI"])
 app.include_router(inventory.router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(billing.router, prefix="/api/bill", tags=["Billing"])
 app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
+app.include_router(photo.router, prefix="/api/photo", tags=["Photo Inventory"])
 
 
 @app.get("/")

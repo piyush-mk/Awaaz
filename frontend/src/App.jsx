@@ -4,6 +4,7 @@ import StockIn from './pages/StockIn'
 import Sell from './pages/Sell'
 import Dashboard from './pages/Dashboard'
 import TestConsole from './pages/TestConsole'
+import PhotoInventory from './pages/PhotoInventory'
 
 function AppShell() {
   const location = useLocation()
@@ -29,6 +30,7 @@ function AppShell() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/stock-in" element={<StockIn />} />
           <Route path="/sell" element={<Sell />} />
+          <Route path="/photo" element={<PhotoInventory />} />
           <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
       </main>

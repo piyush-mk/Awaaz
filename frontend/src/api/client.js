@@ -4,7 +4,11 @@ async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, options)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Request failed')
+    const detail = err.detail
+    const msg = Array.isArray(detail)
+      ? detail.map(d => d.msg || JSON.stringify(d)).join(', ')
+      : (detail || 'Request failed')
+    throw new Error(msg)
   }
   return res.json()
 }
@@ -38,6 +42,14 @@ export async function restockInventory(items) {
   })
 }
 
+export async function editInventory(productId, quantity, reason = 'manual_correction') {
+  return request(`/inventory/${productId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity, reason }),
+  })
+}
+
 // Billing
 export async function generateBill(items) {
   return request('/bill/generate', {
@@ -53,6 +65,21 @@ export async function confirmBill(items, grandTotal) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items, grand_total: grandTotal }),
   })
+}
+
+export async function addProduct(name, quantity, unit = 'unit', price = 0, gst_rate = 0) {
+  return request('/inventory/add-product', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, quantity, unit, price, gst_rate }),
+  })
+}
+
+// Photo Inventory
+export async function parsePhoto(imageFile) {
+  const form = new FormData()
+  form.append('image', imageFile)
+  return request('/photo/parse', { method: 'POST', body: form })
 }
 
 // Dashboard

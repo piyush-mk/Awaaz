@@ -3,8 +3,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from database import get_db
 from models import Product, Inventory, Transaction
-from schemas import InventoryItem, RestockRequest, ParsedItem
+from schemas import InventoryItem, RestockRequest
+from pydantic import BaseModel
 from typing import List
+
+
+class ManualEditRequest(BaseModel):
+    quantity: int
+    reason: str = "manual_correction"
 
 router = APIRouter()
 
@@ -73,3 +79,38 @@ def restock_inventory(req: RestockRequest, db: Session = Depends(get_db)):
 
     db.commit()
     return {"success": True, "updated": updated}
+
+
+@router.put("/{product_id}")
+def update_inventory(product_id: int, req: ManualEditRequest, db: Session = Depends(get_db)):
+    inv = db.query(Inventory).filter(Inventory.product_id == product_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Product not found in inventory")
+
+    product = db.query(Product).filter(Product.id == product_id).first()
+    old_qty = inv.quantity
+    diff = req.quantity - old_qty
+
+    inv.quantity = req.quantity
+    inv.last_updated = datetime.utcnow()
+
+    if diff != 0:
+        db.add(Transaction(
+            product_id=product_id,
+            quantity_change=diff,
+            type="manual_edit",
+            amount=0.0,
+            timestamp=datetime.utcnow(),
+        ))
+
+    db.commit()
+    return {
+        "success": True,
+        "product_id": product_id,
+        "name": product.name,
+        "name_hi": product.name_hi,
+        "old_quantity": old_qty,
+        "new_quantity": req.quantity,
+        "status": get_stock_status(req.quantity, product.threshold),
+        "alert": req.quantity <= product.threshold,
+    }

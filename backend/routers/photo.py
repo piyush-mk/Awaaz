@@ -32,17 +32,19 @@ PRODUCT_MAP = {
     10: {"name": "Dettol Soap",         "name_hi": "डेटॉल साबुन",    "unit": "soap",   "price": 35.0,  "gst_rate": 18.0},
 }
 
-VISION_PROMPT = """You are analyzing a photo of a kirana (Indian grocery) store shelf.
-Identify ALL visible products from this list and estimate how many units are visible:
+VISION_PROMPT = """You are analyzing a photo of a grocery/kirana store shelf or any products.
+Identify ALL visible products/items and estimate the quantity of each.
 
-1=Maggi noodles, 2=Rice 5kg bag, 3=Surf Excel detergent, 4=Tata Salt,
-5=Colgate toothpaste, 6=Aashirvaad Atta flour bag, 7=Patanjali Honey,
-8=Vim Bar dishwash, 9=Parle-G biscuits, 10=Dettol Soap
+Return ONLY a JSON array with product name and quantity. Example:
+[{"name": "Maggi noodles", "quantity": 8}, {"name": "Parle-G biscuits", "quantity": 12}, {"name": "Colgate toothpaste", "quantity": 4}]
 
-Return ONLY a JSON array, nothing else. Example:
-[{"product_id": 1, "quantity": 12}, {"product_id": 9, "quantity": 8}]
-
-Only include products clearly visible. Estimate conservatively."""
+Rules:
+- Include every product you can see, even partially
+- Use specific brand names when visible (e.g. "Maggi", "Parle-G", "Lays", "Coca-Cola")
+- If brand not visible, use generic name (e.g. "water bottle", "chips packet")
+- Estimate quantity conservatively
+- Return [] if no products visible
+- Return ONLY the JSON array, no other text"""
 
 DEMO_ITEMS = [
     {"product_id": 1, "quantity": 8},
@@ -50,6 +52,48 @@ DEMO_ITEMS = [
     {"product_id": 5, "quantity": 6},
     {"product_id": 3, "quantity": 4},
 ]
+
+
+CATALOG_KEYWORDS = {
+    1:  ["maggi", "noodles", "instant noodle"],
+    2:  ["rice", "chawal", "basmati"],
+    3:  ["surf excel", "surf", "detergent", "washing powder"],
+    4:  ["tata salt", "salt", "namak", "iodised salt"],
+    5:  ["colgate", "toothpaste", "paste"],
+    6:  ["aashirvaad", "atta", "flour", "wheat flour"],
+    7:  ["patanjali honey", "honey", "shahad"],
+    8:  ["vim", "vim bar", "dishwash bar"],
+    9:  ["parle-g", "parle g", "parleg", "parle", "biscuit", "glucose biscuit"],
+    10: ["dettol", "dettol soap", "antiseptic soap"],
+}
+
+
+def fuzzy_match_product(name: str) -> int | None:
+    name_lower = name.lower()
+    for pid, keywords in CATALOG_KEYWORDS.items():
+        for kw in keywords:
+            if kw in name_lower or name_lower in kw:
+                return pid
+    return None
+
+
+def build_items_from_names(raw: list[dict]) -> list[ParsedItem]:
+    seen_pids: set[int] = set()
+    items = []
+    for e in raw:
+        name = e.get("name", "")
+        qty  = max(1, int(e.get("quantity", 1)))
+        pid  = fuzzy_match_product(name)
+        if pid and pid not in seen_pids:
+            seen_pids.add(pid)
+            items.append(ParsedItem(product_id=pid, quantity=qty, **PRODUCT_MAP[pid]))
+        elif not pid:
+            # Not in catalog — show it so user knows it was detected
+            items.append(ParsedItem(
+                product_id=0, quantity=qty,
+                name=name, name_hi="", unit="unit", price=0.0, gst_rate=0.0
+            ))
+    return items
 
 
 def build_items(raw: list[dict]) -> list[ParsedItem]:
@@ -63,12 +107,15 @@ def build_items(raw: list[dict]) -> list[ParsedItem]:
 def extract_json(text: str) -> list[dict] | None:
     try:
         match = re.search(r'\[.*?\]', text, re.DOTALL)
-        return json.loads(match.group()) if match else None
+        if not match:
+            return None
+        parsed = json.loads(match.group())
+        return parsed if isinstance(parsed, list) else None
     except Exception:
         return None
 
 
-async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | None:
+async def vision_parse(image_b64: str, mime_type: str):
     if not XAI_KEY:
         return None
     try:
@@ -100,7 +147,9 @@ async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | Non
                 return None
             content = r.json()["choices"][0]["message"]["content"]
             raw = extract_json(content)
-            return build_items(raw) if raw else None
+            if raw is None:
+                return None
+            return build_items_from_names(raw), raw
     except Exception:
         return None
 
@@ -115,10 +164,12 @@ async def parse_photo(image: UploadFile = File(...)):
     mime_type   = image.content_type or "image/jpeg"
     image_b64   = base64.b64encode(image_bytes).decode()
 
-    items = await vision_parse(image_b64, mime_type)
-    if items:
+    result = await vision_parse(image_b64, mime_type)
+    if result is not None:
+        items, raw = result
+        detected_names = ", ".join(e.get("name", "") for e in raw) if raw else "none"
         return VoiceParseResponse(
-            transcript=f"[Photo — {VISION_MODEL}]",
+            transcript=f"Detected: {detected_names}",
             items=items,
             demo_mode=False,
         )

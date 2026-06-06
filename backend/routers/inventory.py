@@ -12,6 +12,14 @@ class ManualEditRequest(BaseModel):
     quantity: int
     reason: str = "manual_correction"
 
+
+class AddProductRequest(BaseModel):
+    name: str
+    quantity: int
+    unit: str = "unit"
+    price: float = 0.0
+    gst_rate: float = 0.0
+
 router = APIRouter()
 
 
@@ -49,6 +57,8 @@ def get_inventory(db: Session = Depends(get_db)):
 def restock_inventory(req: RestockRequest, db: Session = Depends(get_db)):
     updated = []
     for item in req.items:
+        if item.product_id == 0:
+            continue  # unmatched item from photo scan — skip
         inv = db.query(Inventory).filter(Inventory.product_id == item.product_id).first()
         if not inv:
             inv = Inventory(product_id=item.product_id, quantity=0)
@@ -79,6 +89,32 @@ def restock_inventory(req: RestockRequest, db: Session = Depends(get_db)):
 
     db.commit()
     return {"success": True, "updated": updated}
+
+
+@router.post("/add-product")
+def add_product(req: AddProductRequest, db: Session = Depends(get_db)):
+    product = Product(
+        name=req.name,
+        name_hi=req.name,
+        category="general",
+        unit=req.unit,
+        price=req.price,
+        gst_rate=req.gst_rate,
+        threshold=5,
+    )
+    db.add(product)
+    db.flush()
+    inv = Inventory(product_id=product.id, quantity=req.quantity, last_updated=datetime.utcnow())
+    db.add(inv)
+    db.add(Transaction(
+        product_id=product.id,
+        quantity_change=req.quantity,
+        type="restock",
+        amount=0.0,
+        timestamp=datetime.utcnow(),
+    ))
+    db.commit()
+    return {"success": True, "product_id": product.id, "name": product.name, "quantity": req.quantity}
 
 
 @router.put("/{product_id}")

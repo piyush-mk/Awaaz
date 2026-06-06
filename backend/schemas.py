@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class ParsedItem(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
     name: str
     name_hi: str
     quantity: int
@@ -14,7 +14,7 @@ class ParsedItem(BaseModel):
 
 
 class BillItem(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
     name: str
     name_hi: str
     quantity: int
@@ -89,6 +89,7 @@ class VoiceParseResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
+    language: Optional[str] = 'hi'  # 'hi' or 'en'
 
 
 class TTSResponse(BaseModel):

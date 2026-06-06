@@ -3,7 +3,8 @@ import MicButton from '../components/MicButton'
 import { ParsedItemCard } from '../components/ItemCard'
 import Toast from '../components/Toast'
 import QRCode from 'react-qr-code'
-import { parseVoice, generateBill, confirmBill } from '../api/client'
+import { parseVoice, generateBill, confirmBill, textToSpeech } from '../api/client'
+import { speakWithFallback } from '../lib/audio'
 
 // feat/voice-agent branch: wire MicButton → parseVoice → bill preview
 // feat/inventory branch: stock deduction after confirmBill + payment simulation UI
@@ -17,22 +18,37 @@ export default function Sell() {
   const [loading, setLoading] = useState(false)
 
   const handleAudio = async (blob) => {
-    const res = await parseVoice(blob, null)
-    setTranscript(res.transcript)
-    setItems(res.items)
-    setBill(null)
-    setStep('review')
+    try {
+      const res = await parseVoice(blob, null)
+      setTranscript(res.transcript)
+      setItems(res.items.map((item, index) => ({ ...item, ui_id: item.product_id ?? `custom-${Date.now()}-${index}` })))
+      setBill(null)
+      setStep('review')
+      setToast(null)
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
+    }
   }
 
   const handleTextSubmit = async (e) => {
     e.preventDefault()
-    const res = await parseVoice(null, transcript)
-    setItems(res.items)
-    setBill(null)
-    setStep('review')
+    try {
+      const res = await parseVoice(null, transcript)
+      setItems(res.items.map((item, index) => ({ ...item, ui_id: item.product_id ?? `custom-${Date.now()}-${index}` })))
+      setBill(null)
+      setStep('review')
+      setToast(null)
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
+    }
   }
 
   const handleGenerateBill = async () => {
+    if (items.length === 0) {
+      setToast({ message: 'पहले customer order बोलें', type: 'warning' })
+      return
+    }
+
     setLoading(true)
     try {
       const b = await generateBill(items)
@@ -48,7 +64,10 @@ export default function Sell() {
   const handlePaymentDone = async () => {
     setLoading(true)
     try {
-      await confirmBill(bill.items, bill.grand_total)
+      const result = await confirmBill(bill.items, bill.grand_total)
+      const speechText = result.payment_message || `₹${bill.grand_total} का bill paid हो गया.`
+      const tts = await textToSpeech(speechText, 'hi')
+      await speakWithFallback(speechText, tts.audio_base64)
       setStep('done')
       setToast({ message: `₹${bill.grand_total} received via Paytm UPI`, type: 'success' })
     } catch (err) {
@@ -88,7 +107,7 @@ export default function Sell() {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">सामान की सूची</h3>
           {items.map((item) => (
-            <ParsedItemCard key={item.product_id} item={item} />
+            <ParsedItemCard key={item.ui_id ?? item.product_id} item={item} />
           ))}
           <button onClick={handleGenerateBill} disabled={loading} className="btn-orange w-full">
             {loading ? 'बिल बन रहा है...' : 'Generate Bill & QR'}
@@ -102,7 +121,7 @@ export default function Sell() {
           <div className="card space-y-2">
             <h3 className="font-bold text-gray-800">Bill Summary</h3>
             {bill.items.map((i) => (
-              <div key={i.product_id} className="flex justify-between text-sm">
+              <div key={i.product_id ?? `${i.name}-${i.quantity}-${i.unit}`} className="flex justify-between text-sm">
                 <span>{i.name_hi} × {i.quantity}</span>
                 <span>₹{i.total}</span>
               </div>

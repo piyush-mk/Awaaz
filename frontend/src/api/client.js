@@ -17,11 +17,11 @@ export async function parseVoice(audioBlob, transcript) {
   return request('/voice/parse', { method: 'POST', body: form })
 }
 
-export async function textToSpeech(text) {
+export async function textToSpeech(text, language = 'hi') {
   return request('/voice/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, language }),
   })
 }
 

@@ -1,0 +1,9 @@
+references/
+.env
+.venv/
+frontend/node_modules/
+frontend/build/
+backend/__pycache__/
+backend/routers/__pycache__/
+db.sqlite
+.sqlite3

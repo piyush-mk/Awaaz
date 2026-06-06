@@ -19,24 +19,25 @@ def generate_bill(items: List[ParsedItem], db: Session = Depends(get_db)):
     total_gst = 0.0
 
     for item in items:
-        product = db.query(Product).filter(Product.id == item.product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
+        product = None
+        if item.product_id:
+            product = db.query(Product).filter(Product.id == item.product_id).first()
 
-        unit_price = product.price
+        unit_price = product.price if product else item.price
         item_subtotal = unit_price * item.quantity
-        gst_amount = round(item_subtotal * product.gst_rate / 100, 2)
+        gst_rate = product.gst_rate if product else item.gst_rate
+        gst_amount = round(item_subtotal * gst_rate / 100, 2)
         item_total = item_subtotal + gst_amount
 
         bill_items.append(BillItem(
-            product_id=product.id,
-            name=product.name,
-            name_hi=product.name_hi,
+            product_id=product.id if product else None,
+            name=product.name if product else item.name,
+            name_hi=product.name_hi if product else item.name_hi,
             quantity=item.quantity,
-            unit=product.unit,
+            unit=product.unit if product else item.unit,
             unit_price=unit_price,
             subtotal=round(item_subtotal, 2),
-            gst_rate=product.gst_rate,
+            gst_rate=gst_rate,
             gst_amount=gst_amount,
             total=round(item_total, 2),
         ))
@@ -69,6 +70,10 @@ def confirm_bill(req: BillConfirmRequest, db: Session = Depends(get_db)):
     alerts = []
 
     for item in req.items:
+        if not item.product_id:
+            # Custom item: bill was generated, but there is no stock row to deduct.
+            continue
+
         inv = db.query(Inventory).filter(Inventory.product_id == item.product_id).first()
         if not inv:
             raise HTTPException(status_code=404, detail=f"Inventory for product {item.product_id} not found")

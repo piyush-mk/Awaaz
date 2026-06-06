@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
 import { Mic, MicOff, Square } from 'lucide-react'
 
-export default function MicButton({ onResult, color = 'blue', label = 'बोलो', disabled = false }) {
+export default function MicButton({ onResult, color = 'blue', label = 'बोलो', disabled = false, maxDurationMs = 30000 }) {
   const [state, setState] = useState('idle') // idle | recording | loading
   const mediaRef = useRef(null)
+  const timeoutRef = useRef(null)
   const chunksRef = useRef([])
 
   const start = async () => {
@@ -13,16 +14,26 @@ export default function MicButton({ onResult, color = 'blue', label = 'बोल
       chunksRef.current = []
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data)
       recorder.onstop = async () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
         stream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
         setState('loading')
-        await onResult(blob)
-        setState('idle')
+        try {
+          await onResult(blob)
+        } catch (error) {
+          console.error(error)
+          alert(error?.message || 'Voice request failed')
+        } finally {
+          setState('idle')
+        }
       }
       recorder.start()
       mediaRef.current = recorder
       setState('recording')
-      setTimeout(() => recorder.state === 'recording' && recorder.stop(), 6000)
+      timeoutRef.current = setTimeout(() => recorder.state === 'recording' && recorder.stop(), maxDurationMs)
     } catch {
       alert('Microphone permission required')
     }

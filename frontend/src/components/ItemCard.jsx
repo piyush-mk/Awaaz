@@ -29,6 +29,7 @@ export function InventoryCard({ item }) {
 }
 
 export function ParsedItemCard({ item, onQtyChange }) {
+  const itemKey = item.ui_id ?? item.product_id
   return (
     <div className="card flex items-center gap-3">
       <div className="flex-1 min-w-0">
@@ -38,24 +39,20 @@ export function ParsedItemCard({ item, onQtyChange }) {
       {onQtyChange ? (
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={() => onQtyChange(item.product_id, Math.max(1, item.quantity - 1))}
+            onClick={() => onQtyChange(itemKey, Math.max(1, item.quantity - 1))}
             className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center active:bg-gray-200"
           >
             <Minus size={14} />
           </button>
           <span className="text-base font-bold w-6 text-center">{item.quantity}</span>
           <button
-            onClick={() => onQtyChange(item.product_id, item.quantity + 1)}
+            onClick={() => onQtyChange(itemKey, item.quantity + 1)}
             className="w-8 h-8 rounded-full bg-paytm-blue text-white flex items-center justify-center active:bg-paytm-blue-dark"
           >
             <Plus size={14} />
           </button>
         </div>
-      ) : (
-        <div className="text-right flex-shrink-0">
-          <div className="text-sm font-bold text-gray-800">{item.quantity} {item.unit}</div>
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }

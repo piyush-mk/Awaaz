@@ -2,7 +2,8 @@ import { useState } from 'react'
 import MicButton from '../components/MicButton'
 import { ParsedItemCard } from '../components/ItemCard'
 import Toast from '../components/Toast'
-import { parseVoice, restockInventory } from '../api/client'
+import { parseVoice, restockInventory, textToSpeech } from '../api/client'
+import { speakWithFallback } from '../lib/audio'
 
 // feat/inventory branch: build out full inventory list + confirmed state view
 // feat/voice-agent branch: wire MicButton → parseVoice → show results here
@@ -15,27 +16,47 @@ export default function StockIn() {
   const [confirmed, setConfirmed] = useState(false)
 
   const handleAudio = async (blob) => {
-    const res = await parseVoice(blob, null)
-    setTranscript(res.transcript)
-    setItems(res.items)
-    setConfirmed(false)
+    try {
+      const res = await parseVoice(blob, null)
+      setTranscript(res.transcript)
+      setItems(res.items.map((item, index) => ({ ...item, ui_id: item.product_id ?? `custom-${Date.now()}-${index}` })))
+      setConfirmed(false)
+      setToast(null)
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
+    }
   }
 
   const handleTextSubmit = async (e) => {
     e.preventDefault()
-    const res = await parseVoice(null, transcript)
-    setItems(res.items)
-    setConfirmed(false)
+    try {
+      const res = await parseVoice(null, transcript)
+      setItems(res.items.map((item, index) => ({ ...item, ui_id: item.product_id ?? `custom-${Date.now()}-${index}` })))
+      setConfirmed(false)
+      setToast(null)
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' })
+    }
   }
 
-  const handleQtyChange = (productId, qty) => {
-    setItems((prev) => prev.map((i) => i.product_id === productId ? { ...i, quantity: qty } : i))
+  const handleQtyChange = (itemKey, qty) => {
+    setItems((prev) => prev.map((i) => (i.ui_id === itemKey ? { ...i, quantity: qty } : i)))
   }
 
   const handleConfirm = async () => {
+    if (items.length === 0) {
+      setToast({ message: 'पहले voice से items पहचानें', type: 'warning' })
+      return
+    }
+
     setLoading(true)
     try {
       await restockInventory(items)
+
+      const speechText = 'स्टॉक अपडेट हो गया.'
+      const tts = await textToSpeech(speechText, 'hi')
+      await speakWithFallback(speechText, tts.audio_base64, 'hi')
+
       setConfirmed(true)
       setToast({ message: 'Stock update ho gaya! ✓', type: 'success' })
       setItems([])
@@ -71,7 +92,7 @@ export default function StockIn() {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">पहचाना गया सामान</h3>
           {items.map((item) => (
-            <ParsedItemCard key={item.product_id} item={item} onQtyChange={handleQtyChange} />
+            <ParsedItemCard key={item.ui_id ?? item.product_id} item={item} onQtyChange={handleQtyChange} />
           ))}
           <button
             onClick={handleConfirm}

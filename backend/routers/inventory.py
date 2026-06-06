@@ -57,8 +57,8 @@ def get_inventory(db: Session = Depends(get_db)):
 def restock_inventory(req: RestockRequest, db: Session = Depends(get_db)):
     updated = []
     for item in req.items:
-        if item.product_id == 0:
-            continue  # unmatched item from photo scan — skip
+        if not item.product_id:
+            continue  # unmatched/custom item — skip restock
         inv = db.query(Inventory).filter(Inventory.product_id == item.product_id).first()
         if not inv:
             inv = Inventory(product_id=item.product_id, quantity=0)

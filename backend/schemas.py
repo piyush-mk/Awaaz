@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class ParsedItem(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
     name: str
     name_hi: str
     quantity: int

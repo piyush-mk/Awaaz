@@ -52,9 +52,17 @@ export default function PhotoInventory() {
     setLoading(true)
     setError('')
     try {
-      const catalogItems = items.filter(it => it.product_id > 0)
-      const res = await restockInventory(catalogItems)
-      setRestockResult(res)
+      const catalogItems = items.filter(it => it.product_id && it.product_id > 0)
+      const nonCatalogItems = items.filter(it => !it.product_id || it.product_id <= 0)
+
+      // Add non-catalog items to catalog + inventory automatically
+      await Promise.all(
+        nonCatalogItems.map(it => addProduct(it.name, it.quantity, it.unit || 'unit', it.price || 0, it.gst_rate || 0))
+      )
+
+      // Restock existing catalog items
+      const res = catalogItems.length > 0 ? await restockInventory(catalogItems) : {}
+      setRestockResult({ ...res, addedNew: nonCatalogItems.length })
       setPhase('done')
     } catch (e) {
       setError(typeof e.message === 'string' ? e.message : 'Restock failed')
@@ -154,7 +162,7 @@ export default function PhotoInventory() {
             <div>
               <p className="font-semibold text-gray-800">
                 {items.filter(i => i.product_id > 0).length} in catalog
-                {items.filter(i => i.product_id === 0).length > 0 && ` · ${items.filter(i => i.product_id === 0).length} other`}
+                {items.filter(i => !i.product_id || i.product_id <= 0).length > 0 && ` · ${items.filter(i => !i.product_id || i.product_id <= 0).length} other`}
               </p>
               <p className="text-xs text-gray-400 truncate">{transcript}</p>
             </div>
@@ -169,7 +177,7 @@ export default function PhotoInventory() {
 
           <div className="space-y-2">
             {items.map((item, idx) => {
-              const inCatalog = item.product_id > 0
+              const inCatalog = item.product_id && item.product_id > 0
               return (
                 <div key={idx} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${inCatalog ? 'bg-gray-50 border-gray-200' : 'bg-yellow-50 border-yellow-200'}`}>
                   <div className="flex-1 min-w-0">
@@ -221,28 +229,14 @@ export default function PhotoInventory() {
             </p>
           </div>
 
-          {items.filter(i => i.product_id === 0).length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detected — not in catalog</p>
-              {items.filter(i => i.product_id === 0).map((item, i) => {
-                const origIdx = items.indexOf(item)
-                const added = addedItems.has(origIdx)
-                return (
-                  <div key={i} className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2.5">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-yellow-800 truncate">{item.name}</p>
-                      <p className="text-xs text-yellow-600">×{item.quantity} detected</p>
-                    </div>
-                    <button
-                      onClick={() => handleAddProduct(item, origIdx)}
-                      disabled={added}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg ${added ? 'bg-green-100 text-green-700' : 'bg-paytm-blue text-white'}`}
-                    >
-                      {added ? '✓ Added' : '+ Add'}
-                    </button>
-                  </div>
-                )
-              })}
+          {restockResult?.addedNew > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-blue-800">
+                ✓ {restockResult.addedNew} new item{restockResult.addedNew > 1 ? 's' : ''} added to catalog
+              </p>
+              {items.filter(i => !i.product_id || i.product_id <= 0).map((item, i) => (
+                <p key={i} className="text-xs text-blue-600 mt-0.5">{item.name} ×{item.quantity}</p>
+              ))}
             </div>
           )}
 

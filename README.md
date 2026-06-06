@@ -2,16 +2,16 @@
 
 > Paytm AI Hackathon - Theme 2: AI for Small Businesses
 
-Voice-first billing and inventory management for India's 12 million kirana store owners. Merchants speak in Hinglish, AI understands, stock updates or bill is generated, and Paytm QR is ready for payment.
+Voice-first billing and inventory management for India's 12 million kirana store owners. Powered by Sarvam AI, merchants speak in their own language, AI understands, stock updates or bill is generated, and Paytm QR is ready for payment.
 
 ## The Problem
 
-Existing billing and inventory apps require typing in English. Awaaz removes that barrier entirely - owners just speak naturally in Hindi/Hinglish.
+Existing billing and inventory apps require typing in English. Awaaz removes that barrier entirely - owners just speak naturally in whatever language they are comfortable with.
 
 ## Features
 
 ### Voice Stock In
-Speak item names and quantities in Hinglish. Sarvam AI (saaras:v3) transcribes the audio, Paytm AI (Llama 3.3 70B via tool calling) parses it into structured inventory items. Unrecognized products are automatically added to your catalog.
+Speak item names and quantities in your language. Sarvam AI (Saaras v3) transcribes the audio with support for Hindi, Hinglish, and regional languages, then Paytm AI (Llama 3.3 70B via tool calling) parses it into structured inventory items. Unrecognized products are automatically added to your catalog.
 
 > "Das packet Maggi, paanch kilo chawal, do litre tel"
 
@@ -19,7 +19,7 @@ Speak item names and quantities in Hinglish. Sarvam AI (saaras:v3) transcribes t
 Take a photo of your shelf. Grok Vision (xAI) detects all visible products and quantities. Catalog items get restocked instantly. New products are auto-added to your catalog with no manual entry needed.
 
 ### Voice Billing (Sell)
-Speak what a customer is buying. AI generates a GST-compliant bill with itemized breakdown. Paytm QR code generated for UPI payment. Stock is automatically deducted on confirmation.
+Speak what a customer is buying in your language. Sarvam AI transcribes and Paytm AI generates a GST-compliant bill with itemized breakdown. Paytm QR code generated for UPI payment. Stock is automatically deducted on confirmation.
 
 ### Dashboard
 Real-time stats: total stock value, today's sales, low stock alerts, top-selling products, recent transactions. Low stock items flagged immediately.

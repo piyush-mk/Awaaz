@@ -17,7 +17,13 @@ load_dotenv()
 
 router = APIRouter()
 
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "")
+SARVAM_API_KEY  = os.getenv("SARVAM_API_KEY", "")
+SARVAM_BASE_URL = os.getenv("SARVAM_API_BASE_URL", "https://api.sarvam.ai")
+STT_MODEL       = os.getenv("SARVAM_STT_MODEL", "saaras:v2")
+TTS_MODEL       = os.getenv("SARVAM_TTS_MODEL", "bulbul:v1")
+PAYTM_BASE_URL  = os.getenv("PAYTM_API_BASE_URL", "https://api.inference.paytm.com")
+PAYTM_LLM_MODEL = os.getenv("PAYTM_LLM_MODEL", "llama-3.3-70b-versatile")
+PAYTM_AI_KEY    = os.getenv("PAYTM_AI_KEY", "")
 DEMO_MODE = not bool(SARVAM_API_KEY) or os.getenv("DEMO_MODE", "false").lower() == "true"
 
 # Product ID mapping for demo mode
@@ -118,17 +124,22 @@ async def sarvam_stt(audio_bytes: bytes, filename: str) -> str:
     """Call Sarvam Saaras STT API."""
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(
-            "https://api.sarvam.ai/speech-to-text",
+            f"{SARVAM_BASE_URL}/speech-to-text",
             headers={"api-subscription-key": SARVAM_API_KEY},
             files={"file": (filename, audio_bytes, "audio/webm")},
-            data={"language_code": "hi-IN", "model": "saaras:v2"},
+            data={"language_code": "hi-IN", "model": STT_MODEL},
         )
         response.raise_for_status()
-        return response.json().get("transcript", "")
+        data = response.json()
+        # saaras:v3 may return translated_text alongside transcript
+        use_translated = os.getenv("SARVAM_PARSE_USE_TRANSLATED_TEXT", "false").lower() == "true"
+        if use_translated and data.get("translated_text"):
+            return data["translated_text"]
+        return data.get("transcript", "")
 
 
-async def sarvam_llm_parse(transcript: str, db: Session) -> list[ParsedItem]:
-    """Use Sarvam 30B to parse transcript into structured items."""
+async def paytm_llm_parse(transcript: str, db: Session) -> list[ParsedItem]:
+    """Use Paytm AI gateway (Llama 3.3 70B) to parse transcript into structured items."""
     products = db.query(Product).all()
     product_list = "\n".join([f"- {p.name} ({p.name_hi}): ₹{p.price}/{p.unit}" for p in products])
 
@@ -144,15 +155,16 @@ Return ONLY a valid JSON array. Map items to the closest available product.
 Format: [{{"product_name": "Maggi", "quantity": 2}}]
 If no items found, return []"""
 
+    auth_key = PAYTM_AI_KEY or SARVAM_API_KEY
     async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.post(
-            "https://api.sarvam.ai/v1/chat/completions",
+            f"{PAYTM_BASE_URL}/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {SARVAM_API_KEY}",
+                "Authorization": f"Bearer {auth_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": "sarvam-m",
+                "model": PAYTM_LLM_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.1,
             },
@@ -182,6 +194,10 @@ If no items found, return []"""
                 gst_rate=product.gst_rate,
             ))
     return items
+
+
+# Keep old name as alias so nothing breaks if referenced elsewhere
+sarvam_llm_parse = paytm_llm_parse
 
 
 @router.post("/parse", response_model=VoiceParseResponse)
@@ -215,8 +231,8 @@ async def parse_voice(
 
     # Parse transcript
     try:
-        if not used_demo and SARVAM_API_KEY:
-            items = await sarvam_llm_parse(final_transcript, db)
+        if not used_demo and (PAYTM_AI_KEY or SARVAM_API_KEY):
+            items = await paytm_llm_parse(final_transcript, db)
         else:
             items = parse_transcript_demo(final_transcript)
     except Exception:
@@ -239,7 +255,7 @@ async def text_to_speech(req: TTSRequest):
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
-                "https://api.sarvam.ai/text-to-speech",
+                f"{SARVAM_BASE_URL}/text-to-speech",
                 headers={
                     "api-subscription-key": SARVAM_API_KEY,
                     "Content-Type": "application/json",
@@ -248,7 +264,7 @@ async def text_to_speech(req: TTSRequest):
                     "inputs": [req.text],
                     "target_language_code": "hi-IN",
                     "speaker": "meera",
-                    "model": "bulbul:v1",
+                    "model": TTS_MODEL,
                 },
             )
             response.raise_for_status()

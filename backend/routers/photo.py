@@ -1,8 +1,6 @@
 """
-Photo Inventory — shelf photo → AI product detection → inventory update.
-
-Uses Paytm AI Inference (api.inference.paytm.com) with Anthropic-compatible
-/v1/messages endpoint + Claude Haiku for vision. Falls back to demo mode.
+Photo Inventory — shelf photo → Grok-4.3 vision → product detection → inventory update.
+Falls back to demo mode if API unavailable.
 """
 import os
 import base64
@@ -17,9 +15,9 @@ load_dotenv()
 
 router = APIRouter()
 
-PAYTM_AI_KEY = os.getenv("PAYTM_AI_KEY", "")
-PAYTM_AI_URL = os.getenv("PAYTM_AI_URL", "https://api.inference.paytm.com")
-VISION_MODEL = "anthropic.claude-3-haiku-20240307-v1:0"
+XAI_KEY      = os.getenv("XAI_KEY", "")
+XAI_URL      = "https://api.x.ai/v1/chat/completions"
+VISION_MODEL = "grok-4.3"
 
 PRODUCT_MAP = {
     1:  {"name": "Maggi",               "name_hi": "मैगी",           "unit": "packet", "price": 12.0,  "gst_rate": 12.0},
@@ -71,16 +69,14 @@ def extract_json(text: str) -> list[dict] | None:
 
 
 async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | None:
-    """Call Paytm AI Inference — Anthropic /v1/messages with vision."""
-    if not PAYTM_AI_KEY:
+    if not XAI_KEY:
         return None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(
-                f"{PAYTM_AI_URL}/v1/messages",
+                XAI_URL,
                 headers={
-                    "x-api-key": PAYTM_AI_KEY,
-                    "anthropic-version": "2023-06-01",
+                    "Authorization": f"Bearer {XAI_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -91,11 +87,9 @@ async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | Non
                         "content": [
                             {"type": "text", "text": VISION_PROMPT},
                             {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": mime_type,
-                                    "data": image_b64,
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{image_b64}"
                                 },
                             },
                         ],
@@ -104,7 +98,7 @@ async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | Non
             )
             if r.status_code != 200:
                 return None
-            content = r.json()["content"][0]["text"]
+            content = r.json()["choices"][0]["message"]["content"]
             raw = extract_json(content)
             return build_items(raw) if raw else None
     except Exception:
@@ -114,8 +108,8 @@ async def vision_parse(image_b64: str, mime_type: str) -> list[ParsedItem] | Non
 @router.post("/parse", response_model=VoiceParseResponse)
 async def parse_photo(image: UploadFile = File(...)):
     """
-    POST a shelf photo → AI detects products + quantities → same ParsedItem[]
-    as voice parse. Feed directly into POST /api/inventory/restock.
+    POST a shelf photo → Grok-4.3 vision detects products + quantities →
+    same ParsedItem[] as voice parse. Feed into POST /api/inventory/restock.
     """
     image_bytes = await image.read()
     mime_type   = image.content_type or "image/jpeg"
@@ -129,7 +123,6 @@ async def parse_photo(image: UploadFile = File(...)):
             demo_mode=False,
         )
 
-    # Demo fallback — always works
     return VoiceParseResponse(
         transcript="[Photo — Demo mode]",
         items=build_items(DEMO_ITEMS),

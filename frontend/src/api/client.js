@@ -38,6 +38,14 @@ export async function restockInventory(items) {
   })
 }
 
+export async function editInventory(productId, quantity, reason = 'manual_correction') {
+  return request(`/inventory/${productId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity, reason }),
+  })
+}
+
 // Billing
 export async function generateBill(items) {
   return request('/bill/generate', {

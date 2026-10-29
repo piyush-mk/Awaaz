@@ -364,6 +364,14 @@ def notify(
     )
     db.add(message)
     db.flush()
+    try:
+        deliver = _will_deliver(message, db)
+    except Exception:  # noqa: BLE001 - real delivery is best effort; the sim copy already exists
+        log.exception("could not decide whatsapp delivery")
+        deliver = False
+    if not deliver:
+        # Simulator only: the in-app WhatsApp view is the "phone", so the message is delivered there at once.
+        message.status = "delivered"
     events.publish(
         "wa",
         "wa_message",
@@ -375,14 +383,15 @@ def notify(
             "media_ref": media_ref,
             "customer_id": customer_id,
             "supplier_id": supplier_id,
+            "status": message.status,
         },
     )
-    try:
-        if _will_deliver(message, db):
+    if deliver:
+        try:
             message_id = message.id
             sa_event.listen(db, "after_commit", lambda _session: _schedule(message_id), once=True)
-    except Exception:  # noqa: BLE001 - real delivery is best effort; the sim copy already exists
-        log.exception("could not schedule whatsapp delivery")
+        except Exception:  # noqa: BLE001
+            log.exception("could not schedule whatsapp delivery")
     return message
 
 

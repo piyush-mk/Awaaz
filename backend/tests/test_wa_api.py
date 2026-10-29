@@ -74,7 +74,7 @@ def test_notify_is_sim_only_without_keys(client, db, monkeypatch):
     monkeypatch.setattr(wa, "_schedule", scheduled.append)
     msg = wa.notify(db, VERMA_PHONE, "hello", customer_id=VERMA)
     db.commit()
-    assert msg.channel == "sim" and msg.status == "queued" and scheduled == []
+    assert msg.channel == "sim" and msg.status == "delivered" and scheduled == []
     assert asyncio.run(wa.deliver(msg.id)) is False  # keys absent: no-op, no network
     assert wa.normalize_phone("98100 00002") == VERMA_PHONE and wa.e164("09810000002") == "+919810000002"
     assert wa.normalize_phone("abc") is None and wa.same_phone("+91 98100-00002", VERMA_PHONE)

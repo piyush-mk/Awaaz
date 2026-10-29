@@ -1,40 +1,96 @@
-"""Voice agent (Phase 1, Agent A: Counter).
+"""Voice agent (Agent A: Counter). The logic lives in services/counter.py.
 
-POST /api/agent/utterance   multipart: audio | text, context (counter|stock|khata|ask), session_id.
+POST /api/agent/utterance   multipart: audio file OR text (alias: transcript), context
+                            (counter|stock|khata|ask), session_id, optional customer_id, speak.
                             Header X-Demo-Phrase picks a fixture transcript when STT is unavailable.
-                            Flow: sarvam.stt -> (rules parser now, llm.complete_or_rules reconciles)
-                            -> cart edits applied, money/stock changes become PendingAction rows.
-POST /api/actions/{id}/confirm | /cancel   resolve a PendingAction (Agent A owns; others register
-                            their commit handlers for their own `kind`).
+GET  /api/actions           list PendingActions (?status=&session_id=&kind=&limit=)
+GET  /api/actions/{id}      one action
+POST /api/actions/{id}/confirm | /cancel   commit or drop a proposed action
 """
-from fastapi import APIRouter
+import time
+from typing import Optional
 
-from routers._stub import not_implemented
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import PendingAction
+from services import catalog, counter, sarvam
 
 router = APIRouter()
 actions_router = APIRouter()
 
+CONTEXTS = ("counter", "stock", "khata", "ask")
+
 
 @router.post("/utterance")
-async def utterance():
-    not_implemented("POST /api/agent/utterance", "Agent A")
+async def utterance(
+    audio: Optional[UploadFile] = File(None),
+    text: Optional[str] = Form(None),
+    transcript: Optional[str] = Form(None),
+    context: str = Form("counter"),
+    session_id: str = Form("default"),
+    customer_id: Optional[int] = Form(None),
+    speak: bool = Form(True),
+    x_demo_phrase: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+):
+    """One spoken (or typed) utterance -> cart edits applied now, money/stock commits proposed.
+
+    Response: {transcript, cart, actions[], applied[], spoken_text, audio_url, source, stt_source,
+    latency_ms, demo_mode, session_id, ...}. `actions` are the PendingActions this utterance
+    created or resolved; confirm them with POST /api/actions/{id}/confirm."""
+    started = time.perf_counter()
+    if context not in CONTEXTS:
+        raise HTTPException(422, f"context must be one of {', '.join(CONTEXTS)}")
+    typed = (text or transcript or "").strip()
+    if not typed and audio is None:
+        raise HTTPException(422, "Provide audio or text")
+    if typed:
+        stt = await sarvam.stt(b"", text=typed)
+    else:
+        data = await audio.read()  # type: ignore[union-attr]
+        stt = await sarvam.stt(data, audio.filename or "audio.webm",  # type: ignore[union-attr]
+                               keyterms=catalog.keyterms(db), demo_phrase=x_demo_phrase)
+    return await counter.run_utterance(
+        db, session_id=session_id.strip() or "default", transcript=stt.data["transcript"],
+        context=context, customer_id=customer_id, stt_source=stt.source, started=started, speak=speak)
 
 
 @actions_router.get("")
-def list_actions():
-    not_implemented("GET /api/actions", "Agent A")
+def list_actions(status: Optional[str] = None, session_id: Optional[str] = None,
+                 kind: Optional[str] = None, include_cart_edits: bool = False,
+                 limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    q = db.query(PendingAction)
+    if status:
+        q = q.filter(PendingAction.status == status)
+    if session_id:
+        q = q.filter(PendingAction.session_id == session_id)
+    if kind:
+        q = q.filter(PendingAction.kind == kind)
+    elif not include_cart_edits:
+        q = q.filter(PendingAction.kind != "cart_edit")
+    return [counter.action_json(a) for a in q.order_by(PendingAction.id.desc()).limit(limit).all()]
 
 
 @actions_router.get("/{action_id}")
-def get_action(action_id: int):
-    not_implemented("GET /api/actions/{id}", "Agent A")
+def get_action(action_id: int, db: Session = Depends(get_db)):
+    action = db.get(PendingAction, action_id)
+    if action is None:
+        raise HTTPException(404, f"Action {action_id} nahi mila")
+    return counter.action_json(action)
 
 
 @actions_router.post("/{action_id}/confirm")
-def confirm_action(action_id: int):
-    not_implemented("POST /api/actions/{id}/confirm", "Agent A")
+async def confirm_action(action_id: int, body: Optional[dict] = Body(None),
+                         db: Session = Depends(get_db)):
+    """Commit a proposed action. Optional JSON body overrides, e.g. {"customer_id": 2} for a split
+    payment whose khata part had no customer. Idempotent: confirming twice returns the first result
+    with already_resolved=true."""
+    return await counter.resolve_action(db, action_id, "confirm", body or {})
 
 
 @actions_router.post("/{action_id}/cancel")
-def cancel_action(action_id: int):
-    not_implemented("POST /api/actions/{id}/cancel", "Agent A")
+async def cancel_action(action_id: int, body: Optional[dict] = Body(None),
+                        db: Session = Depends(get_db)):
+    return await counter.resolve_action(db, action_id, "cancel", body or {}, speak=False)

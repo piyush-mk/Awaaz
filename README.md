@@ -8,6 +8,26 @@ India's kirana stores run on three things no app has digitised well: speech, pap
 
 Paytm already knows how much every kirana earns. Awaaz records what they sell, what they are owed and what to do next.
 
+## Live demo
+
+Deployed at **https://149-28-224-72.sslip.io** (HTTPS, so the microphone and camera work on phones).
+
+| Page | Link |
+|---|---|
+| Merchant phone app | https://149-28-224-72.sslip.io/app |
+| Soundbox emulator | https://149-28-224-72.sslip.io/soundbox |
+| WhatsApp simulator | https://149-28-224-72.sslip.io/wa |
+| Status and demo checklist | https://149-28-224-72.sslip.io/status |
+| API docs | https://149-28-224-72.sslip.io/docs |
+
+**Tested** (30 Oct 2026):
+- 359 backend tests pass, with no keys and no network.
+- The end-to-end smoke script, which plays the whole demo story over HTTP, passes 30 of 30 checks against this deployed instance.
+- The Soundbox, WhatsApp simulator and phone app were exercised in a headless browser, and live events stream through the HTTPS proxy.
+- The deployed instance runs on built-in fixtures: live Sarvam, Meta WhatsApp and real microphone and camera paths are not yet verified. Each AI result shows a `demo data` chip while on fixtures.
+
+If a page shows stale numbers, press **Reset demo data** on `/status` (the demo shop's data is relative to today).
+
 ## What it does
 
 | Room | Features |

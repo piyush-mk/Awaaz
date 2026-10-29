@@ -3,27 +3,24 @@
 @tailwind utilities;
 
 @layer base {
-  html, body, #root {
+  html, body {
     height: 100%;
     margin: 0;
     padding: 0;
   }
 
-  body {
-    background-color: #F5F7FA;
-    font-family: 'Noto Sans Devanagari', sans-serif;
-    -webkit-tap-highlight-color: transparent;
-    overscroll-behavior: none;
+  #root {
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
   }
 
-  /* Force mobile-width look on desktop too */
-  #root {
-    max-width: 430px;
-    margin: 0 auto;
-    min-height: 100%;
-    position: relative;
-    background: #F5F7FA;
-    box-shadow: 0 0 40px rgba(0,0,0,0.1);
+  body {
+    background-color: #ECF0F4;
+    color: #0E1B33;
+    font-family: 'IBM Plex Sans', 'Noto Sans Devanagari', system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 }
 
@@ -120,3 +117,59 @@
 .status-high { @apply text-stock-green; }
 .status-medium { @apply text-stock-yellow; }
 .status-low { @apply text-stock-red; }
+
+/* The merchant phone shell: 430px column, only inside /app and the legacy pages.
+   Soundbox, WhatsApp sim, Status and Test render full width outside it. */
+.phone-shell {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ECF0F4;
+  box-shadow: 0 0 40px rgba(14, 27, 51, 0.12);
+}
+
+.app-scroll {
+  scrollbar-width: none;
+}
+.app-scroll::-webkit-scrollbar { display: none; }
+
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+
+/* Hold-to-talk orb */
+.orb {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+@keyframes orb-ring {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+.orb-ring { animation: orb-ring 1.4s ease-out infinite; }
+
+@keyframes skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #E3E8EE 25%, #F2F5F8 50%, #E3E8EE 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s linear infinite;
+  border-radius: 10px;
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-up { animation: sheet-up 0.22s ease-out; }
+
+.tabular { font-variant-numeric: tabular-nums; }

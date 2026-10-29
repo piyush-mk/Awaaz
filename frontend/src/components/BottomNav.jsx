@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { Warehouse, ShoppingCart, LayoutDashboard } from 'lucide-react'
+import { Warehouse, ShoppingCart, LayoutDashboard, Camera } from 'lucide-react'
 
 const tabs = [
   { to: '/stock-in', icon: Warehouse, label: 'Stock In', labelHi: 'स्टॉक इन' },
   { to: '/sell', icon: ShoppingCart, label: 'Sell', labelHi: 'बेचें' },
+  { to: '/photo', icon: Camera, label: 'Photo', labelHi: 'फोटो' },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', labelHi: 'डैशबोर्ड' },
 ]
 

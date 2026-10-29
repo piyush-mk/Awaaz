@@ -1,0 +1,25 @@
+# secrets
+.env
+*.env.local
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/.cache/
+
+# local data
+*.sqlite
+backend/db.sqlite
+
+# node
+node_modules/
+frontend/dist/
+
+# os / editor
+.DS_Store
+.claude/settings.local.json
+
+# legacy db backup written by init_db
+*.legacy

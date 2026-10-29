@@ -150,30 +150,35 @@ def vision_fixture(task: str, today: Optional[date] = None) -> Any:
         return [{"name": "Maggi noodles", "quantity": 8}, {"name": "Parle-G biscuits", "quantity": 12},
                 {"name": "Colgate toothpaste", "quantity": 6}, {"name": "Surf Excel", "quantity": 4}]
     if task == "purchase_bill":
+        def line(name, qty, rate, mrp, batch, days, scheme="", free=0, unit="packet"):
+            return {"name": name, "qty": qty, "unit": unit, "rate": rate, "mrp": mrp, "batch": batch,
+                    "expiry": (today + timedelta(days=days)).isoformat(), "scheme_text": scheme,
+                    "free_qty": free}
         return {
             "supplier": "Rajesh Distributors", "bill_no": "RD/2526/4471", "date": today.isoformat(),
             "lines": [
-                {"name": "Surf Excel Easy Wash", "qty": 20, "unit": "packet", "rate": 45.0, "mrp": 45.0,
-                 "batch": "SE2609B", "expiry": (today + timedelta(days=600)).isoformat(),
-                 "scheme_text": "Buy 10 Get 1 Free", "free_qty": 0},
-                {"name": "Maggi 2-Minute Noodles 70g", "qty": 48, "unit": "packet", "rate": 11.0,
-                 "mrp": 12.0, "batch": "MG0926", "expiry": (today + timedelta(days=240)).isoformat(),
-                 "scheme_text": "", "free_qty": 0},
-                {"name": "Colgate Strong Teeth 100g", "qty": 24, "unit": "packet", "rate": 41.0,
-                 "mrp": 45.0, "batch": "CG1026", "expiry": (today + timedelta(days=700)).isoformat(),
-                 "scheme_text": "", "free_qty": 0},
-                {"name": "Parle-G 56g", "qty": 60, "unit": "packet", "rate": 8.6, "mrp": 10.0,
-                 "batch": "PG0926", "expiry": (today + timedelta(days=150)).isoformat(),
-                 "scheme_text": "", "free_qty": 0},
-                {"name": "Lays Magic Masala 52g", "qty": 24, "unit": "packet", "rate": 17.0,
-                 "mrp": 20.0, "batch": "LY0926", "expiry": (today + timedelta(days=100)).isoformat(),
-                 "scheme_text": "", "free_qty": 0},
+                # the story: Surf now Rs 45 (was Rs 42), "Buy 10 Get 1 Free" but the free packet is missing
+                line("Surf Excel Easy Wash", 10, 45.0, 45.0, "SE2609B", 600, "Buy 10 Get 1 Free", 0),
+                line("Maggi 2-Minute Noodles 70g", 48, 11.0, 12.0, "MG0926", 240),
+                line("Colgate Strong Teeth 100g", 24, 41.0, 45.0, "CG1026", 700),
+                line("Parle-G 56g", 60, 8.6, 10.0, "PG0926", 150),
+                line("Dettol Original Soap 75g", 24, 31.0, 35.0, "DT0926", 700, unit="soap"),
+                line("Vim Dishwash Bar 155g", 24, 12.5, 15.0, "VM0926", 500, unit="bar"),
+                line("Tata Salt 1kg", 20, 25.0, 28.0, "TS0926", 540),
+                line("Bournvita 500g Jar", 6, 175.0, 190.0, "BV0826", 45, unit="jar"),  # expires soon
+                line("Britannia Good Day Cashew 75g", 36, 8.5, 10.0, "GD0926", 150),
+                line("Haldi Powder 100g", 12, 34.0, 40.0, "HL0926", 360),
+                line("Cadbury Dairy Milk 25g", 48, 17.5, 20.0, "DM0926", 200),
+                line("Haldiram Bhujia 200g", 12, 48.0, 55.0, "HB0926", 120),
+                # not in the catalog: a new-product candidate
+                line("Lays Magic Masala 52g", 24, 17.0, 20.0, "LY0926", 100),
             ],
         }
     if task == "parchi":
-        return [{"name": "cheeni", "qty": 2, "unit": "kg"}, {"name": "chawal", "qty": 1, "unit": "kg"},
-                {"name": "maggi", "qty": 4, "unit": "packet"}, {"name": "surf excel", "qty": 1, "unit": "packet"},
-                {"name": "doodh", "qty": 2, "unit": "packet"}]
+        return [{"name": "maggi", "qty": 2, "unit": "packet"}, {"name": "cheeni", "qty": 1, "unit": "kg"},
+                {"name": "surf excel", "qty": 1, "unit": "packet"}, {"name": "dal", "qty": 500, "unit": "g"},
+                {"name": "doodh", "qty": 1, "unit": "packet"},
+                {"name": "kurkure", "qty": 1, "unit": "packet"}]  # Kurkure is not in the catalog
     if task == "khata_page":
         return [
             {"customer": "Tiwari ji", "amount": 420.0, "date": "2026-09-30", "note": "ration"},
@@ -184,5 +189,7 @@ def vision_fixture(task: str, today: Optional[date] = None) -> Any:
         ]
     if task == "cash":
         return {"denominations": {"2000": 0, "500": 8, "200": 5, "100": 11, "50": 6, "20": 10,
-                                  "10": 10, "coins": 0}, "total": 6700, "confidence": 0.9}
+                                  "10": 10, "coins": 0}, "total": 6700, "confidence": 0.88,
+                "denomination_confidence": {"2000": 0.95, "500": 0.96, "200": 0.93, "100": 0.92,
+                                            "50": 0.82, "20": 0.74, "10": 0.68, "coins": 0.9}}
     raise ValueError(f"unknown vision task: {task}")

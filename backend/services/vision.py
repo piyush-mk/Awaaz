@@ -30,19 +30,26 @@ _BASE = ("You are reading a photo for an Indian kirana (grocery) shop. "
          "Never invent items that are not visible. Use null for unreadable fields. ")
 
 PROMPTS: dict[str, str] = {
-    "shelf": _BASE + "Identify every product visible on the shelf and estimate the count of each. "
+    "shelf": _BASE + "Identify every product visible on the shelf and count the visible units of each "
+             "(count facings and stacked units; do not count the same item twice). "
              "Use brand names when visible. Return a JSON array of {name, quantity}.",
     "purchase_bill": _BASE + "This is a distributor purchase invoice. Extract the supplier name, bill "
                      "number, date (YYYY-MM-DD) and every line: name, qty, unit, rate (per unit cost), "
-                     "mrp, batch, expiry (YYYY-MM-DD), scheme_text (e.g. 'Buy 10 Get 1 Free', empty if "
-                     "none) and free_qty (free units actually listed on the bill, 0 if none).",
+                     "mrp, batch, expiry (YYYY-MM-DD; convert MM/YY to the last day of that month), "
+                     "scheme_text (e.g. 'Buy 10 Get 1 Free' or '10+1', empty if none) and free_qty "
+                     "(free units actually listed as delivered on the bill, 0 if none). Copy numbers "
+                     "exactly as printed; rate is the per-unit price the shop pays, not the line total.",
     "parchi": _BASE + "This is a handwritten shopping list (parchi), often in Hindi. Transliterate each "
-              "item to common Hinglish and return a JSON array of {name, qty, unit}.",
+              "item to common Hinglish (e.g. cheeni, doodh, dal, maggi) and return a JSON array of "
+              "{name, qty, unit}. qty is a number (use 1 when none is written); unit is one of "
+              "kg, g, litre, ml, packet, dozen, or empty if unclear. One entry per line of the list.",
     "khata_page": _BASE + "This is a page of a handwritten credit ledger (khata). Return a JSON array "
                   "of {customer, amount, date, note} where amount is the outstanding rupees.",
     "cash": _BASE + "This is a photo of cash spread on a counter. Count the notes of each denomination "
             "separately (2000, 500, 200, 100, 50, 20, 10) and give the total rupee value of loose coins "
-            "under 'coins'. Fill the table row by row. Include a 'confidence' between 0 and 1.",
+            "under 'coins'. Fill the table row by row. Include an overall 'confidence' between 0 and 1 "
+            "and a 'denomination_confidence' object with a 0-1 confidence for each denomination key "
+            "(lower it for stacked or overlapping notes and for look-alike 10/20/50 notes).",
 }
 
 _STR = {"type": ["string", "null"]}
@@ -62,7 +69,8 @@ SCHEMAS: dict[str, dict] = {
     "cash": {"type": "object", "properties": {
         "denominations": {"type": "object", "properties": {
             **{str(d): {"type": "integer"} for d in NOTE_DENOMS}, "coins": {"type": "number"}}},
-        "confidence": {"type": "number"}}},
+        "confidence": {"type": "number"},
+        "denomination_confidence": {"type": "object", "additionalProperties": {"type": "number"}}}},
 }
 
 
@@ -147,8 +155,13 @@ def normalize_result(task: str, data: Any) -> Any:
         raw = data.get("denominations") if isinstance(data.get("denominations"), dict) else data
         denoms = {str(d): int(_num(raw.get(str(d)) if str(d) in raw else raw.get(d), 0)) for d in NOTE_DENOMS}
         denoms["coins"] = _num(raw.get("coins"), 0)
+        per_denom = data.get("denomination_confidence")
+        per_denom = ({k: min(1.0, max(0.0, _num(per_denom.get(k), 0.5)))
+                      for k in (*(str(d) for d in NOTE_DENOMS), "coins") if k in per_denom}
+                     if isinstance(per_denom, dict) else {})
         return {"denominations": denoms, "total": cash_total(denoms),
-                "confidence": min(1.0, max(0.0, _num(data.get("confidence"), 0.5)))}
+                "confidence": min(1.0, max(0.0, _num(data.get("confidence"), 0.5))),
+                "denomination_confidence": per_denom}
     raise ValueError(f"unknown vision task: {task}")
 
 

@@ -93,6 +93,7 @@ def set_stock(db: Session, product_id: int, target: float, *, kind: str = "adjus
         add_stock(db, product_id, diff, kind=kind, note=note)
     elif diff < 0:
         deduct_fifo(db, product_id, -diff, kind=kind, allow_negative=True)
+        db.flush()  # autoflush is off: make the new StockMove visible to the query below
         db.query(StockMove).filter(StockMove.product_id == product_id).order_by(
             StockMove.id.desc()).first().note = note
     return diff

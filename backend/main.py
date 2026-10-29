@@ -47,7 +47,7 @@ app.include_router(billing.router, prefix="/api/bill", tags=["Billing"])
 app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(photo.router, prefix="/api/photo", tags=["Photo Inventory"])
 
-# --- v2 (stubs until Phase 1) ---
+# --- v2 ---
 app.include_router(agent.router, prefix="/api/agent", tags=["Agent"])
 app.include_router(agent.actions_router, prefix="/api/actions", tags=["Agent"])
 app.include_router(cart.router, prefix="/api/cart", tags=["Cart"])
@@ -63,6 +63,10 @@ app.include_router(brief.router, prefix="/api", tags=["Brief"])
 app.include_router(stock.router, prefix="/api/stock", tags=["Stock"])
 app.include_router(events.router, prefix="/api", tags=["Events"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(payments.webhook_router, prefix="/webhooks/payments", tags=["Payments"])
+app.include_router(purchases.suppliers_router, prefix="/api/suppliers", tags=["Suppliers"])
+app.include_router(cart.customers_router, prefix="/api/customers", tags=["Customers"])
+app.include_router(khata.public_router, prefix="/k", tags=["Khata"])
 
 
 @app.get("/")

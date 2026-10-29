@@ -121,12 +121,12 @@ def test_add_product(client):
     ("get", "/api/invoices"), ("get", "/r/sometoken"), ("get", "/api/khata/customers"),
     ("post", "/webhooks/whatsapp"), ("get", "/api/wa/outbox"), ("post", "/api/purchases/scan"),
     ("post", "/api/galla/scan"), ("get", "/api/brief/today"), ("post", "/api/reorder/draft"),
-    ("get", "/api/stock/cover"), ("post", "/api/actions/1/confirm"), ("post", "/api/ask"),
+    ("get", "/api/stock/cover"), ("post", "/api/actions/999999/confirm"), ("post", "/api/ask"),
 ])
-def test_phase1_stubs_return_501(client, method, path):
+def test_v2_routes_are_implemented(client, method, path):
+    """Every v2 route is mounted and no longer a Phase 0 stub (which answered 501)."""
     r = getattr(client, method)(path)
-    assert r.status_code == 501
-    assert "not implemented" in r.json()["detail"].lower()
+    assert r.status_code != 501
 
 
 def test_whatsapp_verify_handshake(client):

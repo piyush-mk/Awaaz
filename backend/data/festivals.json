@@ -1,0 +1,37 @@
+{
+  "_comment": "Static festival calendar. multipliers are demand multipliers per product festival_tag versus a normal week; dates marked approx should be re-checked before relying on them.",
+  "festivals": [
+    {
+      "name": "Dhanteras",
+      "date": "2026-11-06",
+      "lead_days": 10,
+      "approx": false,
+      "multipliers": {"ghee": 4.0, "dry_fruits": 4.0, "diya": 6.0, "mithai": 3.0, "pooja": 3.0, "oil": 1.5, "staples": 1.2},
+      "last_year": {"date": "2025-10-18", "note": "ghee and dry fruits sold about 4x a normal week"}
+    },
+    {
+      "name": "Diwali",
+      "date": "2026-11-08",
+      "lead_days": 10,
+      "approx": false,
+      "multipliers": {"ghee": 3.5, "dry_fruits": 3.5, "diya": 5.0, "mithai": 3.0, "pooja": 3.0, "oil": 1.5, "staples": 1.2},
+      "last_year": {"date": "2025-10-20", "note": "mithai boxes and diyas peaked the evening before"}
+    },
+    {
+      "name": "Bhai Dooj",
+      "date": "2026-11-10",
+      "lead_days": 5,
+      "approx": true,
+      "multipliers": {"mithai": 2.5, "dry_fruits": 2.0, "pooja": 1.5},
+      "last_year": {"date": "2025-10-23", "note": ""}
+    },
+    {
+      "name": "Holi",
+      "date": "2027-03-04",
+      "lead_days": 10,
+      "approx": true,
+      "multipliers": {"mithai": 2.5, "ghee": 2.0, "dry_fruits": 2.0, "oil": 1.5},
+      "last_year": {"date": "2026-03-04", "note": ""}
+    }
+  ]
+}

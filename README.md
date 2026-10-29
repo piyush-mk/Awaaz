@@ -1,97 +1,132 @@
-# Awaaz - Voice Business Suite for Kirana Stores
+# Awaaz: the AI munim for every Paytm merchant
 
-> Paytm AI Hackathon - Theme 2: AI for Small Businesses
+> Bolo. Dikhao. Ho gaya. (Speak. Show. Done.)
 
-Voice-first billing and inventory management for India's 12 million kirana store owners. Powered by Sarvam AI, merchants speak in their own language, AI understands, stock updates or bill is generated, and Paytm QR is ready for payment.
+Paytm Build for India AI Hackathon, Delhi. Track 1: Merchant Growth AI. Team PinkFloyd.
 
-## The Problem
+India's kirana stores run on three things no app has digitised well: speech, paper and trust. Orders are spoken across the counter, stock arrives on distributor bills, and credit lives in a notebook. Awaaz is an AI munim, the shop manager who kept the khata, ran the counter and advised the owner, built to work on the Paytm Soundbox and the Paytm for Business app. The merchant speaks or points a phone camera, and the shop's whole day is recorded without typing.
 
-Existing billing and inventory apps require typing in English. Awaaz removes that barrier entirely - owners just speak naturally in whatever language they are comfortable with.
+Paytm already knows how much every kirana earns. Awaaz records what they sell, what they are owed and what to do next.
 
-## Features
+## What it does
 
-### Voice Stock In
-Speak item names and quantities in your language. Sarvam AI (Saaras v3) transcribes the audio with support for Hindi, Hinglish, and regional languages, then Paytm AI (Llama 3.3 70B via tool calling) parses it into structured inventory items. Unrecognized products are automatically added to your catalog.
+| Room | Features |
+|---|---|
+| **Counter** (काउंटर) | Voice billing in Indian languages mixed with English. "Bees rupaye ki cheeni" becomes a 450 g line ("450 gram tolo"). Exact-amount UPI QR, spoken confirmation, GST worked out of the MRP (Bill of Supply for composition stores), split payments, undo by voice, parchi (handwritten list) photo to cart, "usual basket" for regulars, WhatsApp text and voice receipts |
+| **Godown** (गोदाम) | Distributor bill photo to stock with a price guard (Surf Rs3 costlier) and a scheme guard (free packet not counted), expiry alerts and return-claim amounts, shelf photo audit, voice stock-in, missed-sale tracking |
+| **Khata** (खाता) | Udhaar by voice with an instant WhatsApp confirmation to the customer, credit limits from payment history, khata notebook photo import, salary-day reminders, simulated Paytm Postpaid offer at the counter, customer passbook page |
+| **Hisaab** (हिसाब) | Today's sales, payment split, hourly and 14-day charts, margin, invoices with public receipt pages, galla (cash) photo count checked against the day's bills |
+| **Salaah** (सलाह) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask your munim" by voice, WhatsApp voice-note and photo orders from customers |
 
-> "Das packet Maggi, paanch kilo chawal, do litre tel"
+Every AI result carries a small `source / latency` chip so it is always clear what is live and what is demo data. Money and stock never change without the merchant's confirmation ("haan" or a tap).
 
-### Photo Inventory (Shelf Scan)
-Take a photo of your shelf. Grok Vision (xAI) detects all visible products and quantities. Catalog items get restocked instantly. New products are auto-added to your catalog with no manual entry needed.
+## Pages
 
-### Voice Billing (Sell)
-Speak what a customer is buying in your language. Sarvam AI transcribes and Paytm AI generates a GST-compliant bill with itemized breakdown. Paytm QR code generated for UPI payment. Stock is automatically deducted on confirmation.
+| URL | What |
+|---|---|
+| `/app` | Merchant phone app (mobile first): the five rooms above |
+| `/soundbox` | Emulator of the Paytm AI Soundbox, driven live by events: listening, bill, QR, paid |
+| `/wa` | WhatsApp simulator that can also play the customer (text, voice note, photo) |
+| `/status` | Provider health, demo checklist, reset button |
+| `/test` | Engineering console with canned requests for every endpoint |
+| `/docs` | Interactive API docs (FastAPI) |
 
-### Dashboard
-Real-time stats: total stock value, today's sales, low stock alerts, top-selling products, recent transactions. Low stock items flagged immediately.
+## Quick start (no API keys needed)
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI + SQLAlchemy + SQLite |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Speech-to-Text | Sarvam AI - Saaras v3 (hi-IN) |
-| Text-to-Speech | Sarvam AI - Bulbul v3 |
-| LLM Parse | Paytm AI Gateway - Llama 3.3 70B Versatile |
-| Vision | xAI - Grok Vision |
-| Payments | Paytm UPI QR (UPI deep link) |
-
-## Running Locally
+Requirements: Python 3.12, Node 20.
 
 ```bash
 # Backend
 cd backend
-pip install -r requirements.txt
-cp .env.example .env   # add your API keys
-python seed.py         # seed 10 products + demo data
-uvicorn main:app --reload --port 8000
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env              # every key is optional
+.venv/bin/uvicorn main:app --reload --port 8000
 
-# Frontend
+# Frontend (second terminal)
 cd frontend
 npm install
-npm run dev            # http://localhost:5173
+npm run dev                       # http://localhost:5173
 ```
 
-### Required API Keys (in `backend/.env`)
+On first start the database seeds itself with a demo shop, "Ramesh General Store" in Laxmi Nagar: about 40 products, 45 days of sales, suppliers, and customers with udhaar balances. Open http://localhost:5173/app.
 
-```env
-SARVAM_API_KEY=your_key          # sarvam.ai - STT + TTS
-PAYTM_API_KEY=your_key           # api.inference.paytm.com - LLM
-XAI_KEY=your_key                 # x.ai - vision/shelf scan
+Without keys the app runs on fixtures and rules: speech cannot be transcribed, so use the **Type** box on the Counter tab (or the sample phrases on `/soundbox`), and photo scans return built-in sample results. Everything else, including payments, stock, khata, receipts, the brief and reorders, works for real against the local database.
+
+### Try the demo story
+
+1. `/status`: press **Reset demo data**.
+2. `/soundbox` in one window, `/app` in another.
+3. Counter, type `do maggi ek surf excel chaar colgate`: the cart totals Rs249. Add `bees rupaye ki cheeni` for "450 gram tolo".
+4. **Bill banao**, then **Payment aa gaya**: the Soundbox shows the QR, then "received".
+5. Khata, give Verma ji Rs500 udhaar: his WhatsApp confirmation appears in `/wa`.
+6. Godown, bill scan: price and scheme flags appear. Hisaab, galla: Rs150 short.
+
+The full script with props is in [docs/DEMO.md](docs/DEMO.md).
+
+### Tests
+
+```bash
+cd backend && .venv/bin/pytest -q          # 359 tests, no keys, no network
+python scripts/smoke.py --base http://localhost:8000   # plays the whole demo story over HTTP
 ```
 
-Without keys, voice parsing falls back to demo mode (5 hardcoded Hinglish phrases always work).
+## Going live: API keys
 
-## API Endpoints
+Put keys in `backend/.env` (never commit it). All are optional; `DEMO_MODE=auto` falls back to fixtures per call so the demo always completes.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/voice/parse` | Audio/text to structured items (STT + LLM) |
-| POST | `/api/voice/tts` | Text to Hindi audio (Bulbul TTS) |
-| POST | `/api/photo/parse` | Shelf photo to detected products (Grok Vision) |
-| GET | `/api/inventory` | All products with stock levels |
-| POST | `/api/inventory/restock` | Add stock |
-| POST | `/api/inventory/add-product` | Add new product to catalog |
-| POST | `/api/bill/generate` | Items to GST bill |
-| POST | `/api/bill/confirm` | Confirm sale, deduct stock |
-| GET | `/api/dashboard` | Sales stats + low stock alerts |
-| GET | `/api/alerts` | Low stock items |
-| GET | `/api/transactions` | Recent 20 transactions |
+| Variable | Purpose |
+|---|---|
+| `SARVAM_API_KEY` | Speech to text (Saaras), LLM with tool calling (Sarvam-105B), text to speech (Bulbul), vision |
+| `PAYTM_API_KEY` | Secondary LLM (Paytm inference gateway) |
+| `XAI_KEY` | Vision fallback (Grok) |
+| `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` | WhatsApp Cloud API. Without them the in-app simulator is used |
+| `MERCHANT_UPI_VPA`, `MERCHANT_NAME` | Receiver of the demo QR. **Real money if scanned** |
+| `PUBLIC_BASE_URL` | Public https URL of the backend (receipt links, webhooks, CORS) |
+| `DEMO_MODE` | `auto` (default), `on` (never call external APIs), `off` (surface provider errors) |
+| `DATABASE_URL` | Defaults to a SQLite file in `backend/` |
 
-## Demo Script (2 min 40 sec)
+Check `/status` (or `GET /api/admin/health?live=1`) to see which providers are live, falling back, or missing a key.
 
-1. **Stock In by Voice** - "Das packet Maggi, paanch kilo chawal" - items appear as cards - Confirm - stock updated
-2. **Stock In by Photo** - Take shelf photo - AI detects all products - new items auto-added to catalog - stock updated
-3. **Sell** - "Do Maggi, ek Surf Excel, chaar Colgate" - Rs.294 bill - Paytm QR - confirm - stock deducted
-4. **Dashboard** - Rs.3,247 today's sales, 3 low stock alerts, top products
+## How it is built
 
-## Key Numbers
+```
+ phone /app    Soundbox /soundbox    WhatsApp sim /wa
+      |               |  SSE events        |
+      v               v                    v
+  FastAPI  routers: agent, cart, payments, invoices, khata, purchases,
+           galla, brief, stock, whatsapp, admin, events
+  services: sarvam, llm, vision, quantity, catalog, pricing, invoicing,
+            stock_ops, receipts, whatsapp, khata, insights, reorder, ...
+  SQLite (SQLAlchemy)
+```
 
-- 12 million kirana stores in India
-- 30 million Paytm merchants (zero CAC for distribution)
-- 50-100 transactions per merchant per day
+- One pattern everywhere: capture (voice, photo, WhatsApp), understand (Sarvam), propose (a pending action), the merchant confirms, then commit and notify.
+- Every AI call goes through a provider chain with fallback: Sarvam, then a secondary provider, then deterministic rules, then a demo fixture.
+- The rules parser answers in milliseconds and the cart updates immediately; the LLM result reconciles shortly after.
+- Run the API as a **single worker**: live events use an in-process bus.
+
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Deployment and day-of checklist: [RUNBOOK.md](RUNBOOK.md). Product vision: [PRODUCT.md](PRODUCT.md).
+
+## Repository layout
+
+```
+backend/            FastAPI app (routers/, services/, models.py, seed.py, tests/)
+frontend/           React + Vite + Tailwind (src/pages/app, Soundbox, WhatsAppSim, StatusPage)
+scripts/            smoke.py (end-to-end), deploy.sh (generic redeploy)
+docs/               ARCHITECTURE.md, DEMO.md
+PRODUCT.md          The product vision and ecosystem
+RUNBOOK.md          Keys, rehearsal checklist, deployment, troubleshooting
+```
+
+## Status and limits
+
+- Built for a hackathon prototype. Payments use a real UPI intent QR plus a "payment received" simulation; a Paytm Dynamic QR adapter point exists but is not enabled. Postpaid and the Soundbox are emulated and labelled as such.
+- Live Sarvam, Meta WhatsApp and camera/microphone paths are written against the vendors' documentation. Run `/status` Live check and `scripts/smoke.py --live` after adding keys.
+- There is no login. Do not expose a keyed instance publicly without adding authentication.
+- GST rates in the seed follow the post 22 Sept 2025 structure; verify against the CBIC notification before real use.
 
 ## Team
 
-- **Aadarsh** - Photo Inventory (shelf scan via Grok Vision), backend integration, deployment
-- **Piyush** - Voice pipeline (STT + LLM parse + TTS), billing flow, dashboard
+- Aadarsh Agarwal
+- Piyush Mohapatra

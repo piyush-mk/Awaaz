@@ -1,155 +1,43 @@
-# Paytm Voice Business Suite — CLAUDE.md
+# Awaaz: the AI munim (CLAUDE.md)
 
-## What This Is
-Hackathon project for Paytm AI Hackathon (Theme 2: AI for Small Businesses).
-Voice-first billing + inventory management for kirana store owners using Sarvam AI (Hinglish STT/LLM/TTS).
-The merchant speaks in Hinglish → AI generates bill or updates stock → Paytm QR for payment.
+## What this is
+Awaaz is a voice and camera AI manager for kirana stores, built for the Paytm Build for India AI Hackathon (Delhi, 31 Oct 2026, Track 1: Merchant Growth AI). The merchant speaks or points a phone camera; the shop's billing, stock, udhaar and accounts are recorded without typing. Sarvam AI is the official AI partner, so Sarvam models are preferred everywhere. Product vision: PRODUCT.md. Architecture: docs/ARCHITECTURE.md. Deploy and keys: RUNBOOK.md. Demo script: docs/DEMO.md.
 
-## Running the App
+## Running it
 
 ```bash
-# Backend (Python 3.10+)
+# Backend (Python 3.12)
 cd backend
-pip install -r requirements.txt
-cp .env.example .env          # add SARVAM_API_KEY if you have it
-python seed.py                # initialize DB + seed 10 products + demo data
-uvicorn main:app --reload --port 8000
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cp .env.example .env                 # every key is optional
+.venv/bin/uvicorn main:app --reload --port 8000   # seeds the demo shop on first start
 
 # Frontend
-cd frontend
-npm install
-npm run dev                   # starts on http://localhost:5173
+cd frontend && npm install && npm run dev          # http://localhost:5173 (proxies /api, /r, /k, /webhooks)
+
+# Tests
+cd backend && .venv/bin/pytest -q                  # 359 tests, no keys, no network
+python scripts/smoke.py --base http://localhost:8000   # whole demo story over HTTP (resets demo data)
 ```
 
-API docs at http://localhost:8000/docs
+## Layout
+- `backend/routers/`: HTTP endpoints (agent, cart, payments, invoices, khata, purchases, galla, brief, stock, whatsapp, admin, events, plus legacy voice/photo/inventory/billing/dashboard).
+- `backend/services/`: logic and provider wrappers (sarvam, llm, vision, quantity, catalog, pricing, invoicing, stock_ops, receipts, whatsapp, khata, insights, reorder, fixtures).
+- `backend/models.py`, `seed.py`: data model and the demo shop "Ramesh General Store" (seed is relative to today: run reset-demo before rehearsals).
+- `frontend/src/pages/app/`: merchant phone app (Counter, Godown, Khata, Hisaab, Salaah). `pages/Soundbox.jsx`, `WhatsAppSim.jsx`, `StatusPage.jsx`, `TestConsole.jsx`. `api/client.js` is the single source of truth for API calls.
 
-## Architecture
+## Conventions
+- Capture, understand, propose, confirm, commit, notify: money and stock only change after the merchant confirms (`PendingAction`).
+- Every AI call returns `{data, source, latency_ms}` and falls back: Sarvam, secondary provider, rules, fixture. `DEMO_MODE=auto` must keep the demo working with no keys.
+- Prices are MRP inclusive; GST is worked out of the MRP (`services/pricing.py`). Rates are data, not code.
+- Run the API as a single worker (in-process event bus).
+- Never commit `.env`, databases or keys. The repo is public.
+- No API contract changes without telling the other person: endpoint shapes are covered by tests.
 
-```
-awaaz/
-├── backend/
-│   ├── main.py               # FastAPI app, CORS, router registration
-│   ├── database.py           # SQLite + SQLAlchemy engine/session
-│   ├── models.py             # Product, Inventory, Transaction, Customer
-│   ├── schemas.py            # Pydantic request/response models
-│   ├── seed.py               # 10 products + demo inventory + mock transactions
-│   └── routers/
-│       ├── voice.py          # STT + Sarvam 30B parsing (+ demo mode fallback)
-│       ├── inventory.py      # GET /api/inventory, POST /api/inventory/restock
-│       ├── billing.py        # POST /api/bill/generate, confirm, QR, TTS
-│       └── dashboard.py      # GET /api/dashboard, /api/alerts, /api/transactions
-└── frontend/
-    └── src/
-        ├── App.jsx           # Router + bottom nav layout
-        ├── api/client.js     # All API calls (single source of truth)
-        ├── components/
-        │   ├── BottomNav.jsx
-        │   ├── MicButton.jsx # Reusable voice recording button (WebRTC)
-        │   ├── Toast.jsx
-        │   └── ItemCard.jsx
-        └── pages/
-            ├── StockIn.jsx   # PERSON 1 owns this
-            ├── Sell.jsx      # PERSON 2 owns this
-            └── Dashboard.jsx # PERSON 2 owns this
-```
+## UI
+- Palette: ink navy `#0E1B33` / `#1B2330`, Paytm cyan `#00B9F5`, accent orange `#FF8A1F`, background `#ECF0F4`. IBM Plex Sans plus Noto Sans Devanagari.
+- Mobile first (375px), touch targets at least 44px, Hindi headings large, no emoji (lucide-react icons).
+- Rooms (bottom nav): Counter, Godown, Khata, Hisaab, Salaah.
 
-## Branches
-- `main` — shared base: working backend, scaffold frontend, seed data
-- `feat/voice-pipeline` — **Person 1**: Voice recording + STT + Sarvam 30B parsing + Stock In UI + TTS
-- `feat/billing-dashboard` — **Person 2**: Bill UI + QR + payment simulation + Dashboard + charts
-
-**API contracts are frozen on main. Do not change endpoint signatures without telling each other.**
-
-## API Endpoints (All implemented in main)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/voice/parse | Audio → STT → LLM parse → [{product_id, name, quantity, price}] |
-| POST | /api/voice/tts | Text → Bulbul TTS → audio base64 |
-| GET | /api/inventory | All products with current stock levels |
-| POST | /api/inventory/restock | Add stock from parsed voice items |
-| POST | /api/bill/generate | Parsed items → bill with GST breakdown |
-| POST | /api/bill/confirm | Confirm bill → deduct inventory → create transaction |
-| GET | /api/dashboard | Stats: total_stock_value, today_sales, low_stock_count, top_selling |
-| GET | /api/alerts | Items below threshold (low stock) |
-| GET | /api/transactions | Recent 20 transactions |
-
-## Sarvam AI Integration
-
-```python
-# STT (Saaras)
-POST https://api.sarvam.ai/speech-to-text
-Headers: api-subscription-key: <KEY>
-Body (multipart): file=<audio>, language_code="hi-IN", model="saaras:v2"
-Response: { "transcript": "do maggi ek surf excel" }
-
-# TTS (Bulbul V3)
-POST https://api.sarvam.ai/text-to-speech
-Headers: api-subscription-key: <KEY>
-Body: { "inputs": ["Bill ban gaya. 294 rupee."], "target_language_code": "hi-IN", "speaker": "meera" }
-Response: { "audios": ["<base64 mp3>"] }
-
-# LLM (Sarvam-M / 30B) - OpenAI-compatible
-POST https://api.sarvam.ai/v1/chat/completions
-Headers: Authorization: Bearer <KEY>
-Body: { "model": "sarvam-m", "messages": [...] }
-```
-
-Set `SARVAM_API_KEY` in `backend/.env`. Without it, demo mode activates automatically.
-
-## Demo Mode (CRITICAL — never let the demo fail)
-
-Voice parsing has 5 hardcoded Hinglish phrases that always return perfect results:
-
-| Phrase | Returns |
-|--------|---------|
-| "do maggi ek surf excel chaar colgate" | Maggi:2, Surf:1, Colgate:4 |
-| "das packet maggi paanch kilo chawal do litre tel" | Maggi:10, Rice:5, Oil:2 |
-| "aashirvaad atta teen bag tata namak chaar packet" | Atta:3, Salt:4 |
-| "paanch dettol sabun teen vim bar do parle g" | Dettol:5, Vim:3, ParleG:2 |
-| "ek patanjali shahad do colgate" | Honey:1, Colgate:2 |
-
-If no API key → demo mode. If API fails → fall back to demo mode. Always works.
-
-## Product Catalog (Seeded in DB)
-
-| ID | Name | Hindi | Price | Unit | GST |
-|----|------|-------|-------|------|-----|
-| 1 | Maggi | मैगी | ₹12 | packet | 12% |
-| 2 | Rice 5kg | चावल | ₹350 | bag | 0% |
-| 3 | Surf Excel | सर्फ एक्सेल | ₹45 | packet | 18% |
-| 4 | Tata Salt | टाटा नमक | ₹28 | packet | 0% |
-| 5 | Colgate | कोलगेट | ₹45 | packet | 12% |
-| 6 | Aashirvaad Atta 5kg | आशीर्वाद आटा | ₹320 | bag | 0% |
-| 7 | Patanjali Honey | पतंजलि शहद | ₹180 | bottle | 12% |
-| 8 | Vim Bar | विम बार | ₹15 | bar | 18% |
-| 9 | Parle-G | पारले-जी | ₹10 | packet | 12% |
-| 10 | Dettol Soap | डेटॉल साबुन | ₹35 | soap | 18% |
-
-Initial inventory has 3 low-stock items (Salt, Atta, Vim) → alerts show immediately on dashboard.
-
-## UI Theme
-- Primary (Paytm Blue): `#00B9F5` → `paytm-blue` in Tailwind
-- Accent (Orange): `#FF6F00` → `paytm-orange`
-- Background: `#F5F7FA`
-- Green (in-stock): `#34C759`
-- Yellow (medium): `#FFCC00`
-- Red (low-stock): `#FF3B30`
-- Mobile-first: target 375px width
-- Touch targets: minimum 44px height
-- Hindi text: `text-xl font-bold` minimum
-
-## Key Demo Numbers
-- Demo bill: Maggi×2 + Surf Excel×1 + Colgate×4 → Total ₹294 (incl. GST)
-- Today's sales pre-seeded: ₹3,247
-- 12 million kirana stores in India
-- 80% owners have limited English literacy
-- 30 million Paytm merchants (zero CAC)
-- 50-100 transactions per merchant per day
-
-## Pitch Script (2 min 40 sec)
-1. **Open (20s)**: "India has 12 million kirana stores. 80% owners can't type English..."
-2. **Demo 1 - Stock In (30s)**: Speak "Das packet Maggi, paanch kilo chawal, do litre tel" → stock updated
-3. **Demo 2 - Sell (40s)**: Speak "Do Maggi, ek Surf Excel, chaar Colgate" → ₹294 QR → payment → stock deducted
-4. **Dashboard (15s)**: "Total stock value, today's sales, low stock alerts..."
-5. **Close (15s)**: "Voice layer inside Paytm for Business that 30M merchants already have."
+## Writing style for docs and copy
+Plain language, no em-dashes, no claims about literacy, and say "Indian languages mixed with English" rather than naming a single dialect.

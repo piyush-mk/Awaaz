@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import argparse
 import base64
+import json
 import sys
+from pathlib import Path
 import time
 from urllib.parse import urlparse
 
 import httpx
+
+TESTDATA = Path(__file__).resolve().parent / "testdata"
 
 # 1x1 transparent PNG, enough to satisfy an image upload when the server is on fixtures.
 PNG = base64.b64decode(
@@ -53,10 +57,18 @@ def main() -> int:
     check("demo checklist ready", cl.get("ready"), f"{cl.get('passed')}/{cl.get('total')} failed={cl.get('failed')}")
 
     print("1. distributor bill scan (deck slide 6, 9:30 am)")
-    r = post("/api/purchases/scan", files={"image": ("bill.png", PNG, "image/png")})
+    if args.live:  # real vision reads a real image: use the synthetic distributor bill with known answers
+        bill_img = ("bill.jpg", (TESTDATA / "bill.jpg").read_bytes(), "image/jpeg")
+    else:          # fixtures answer whatever image is sent
+        bill_img = ("bill.png", PNG, "image/png")
+    r = post("/api/purchases/scan", files={"image": bill_img})
     scan = r.json() if r.status_code == 200 else {}
     codes = {f["code"] for f in scan.get("flags", [])}
     check("scan returns a proposal", r.status_code == 200 and scan.get("action_id"), f"source={scan.get('source')}")
+    if args.live:
+        truth = json.loads((TESTDATA / "bill_truth.json").read_text())
+        check("live vision read all 8 bill lines", len(scan.get("lines", [])) == len(truth["lines"]), f"{len(scan.get('lines', []))} lines, source={scan.get('source')}")
+        check("live vision total matches the printed total", abs(float(scan.get("total") or 0) - truth["total"]) < 0.5, f"{scan.get('total')} vs {truth['total']}")
     check("price guard flags Surf Rs3 costlier", "price_increase" in codes)
     check("scheme guard flags missing free packet", "scheme_missed" in codes)
     surf_before = next((i["qty"] for i in c.get("/api/stock").json()["items"] if i["name"] == "Surf Excel"), None)
@@ -107,9 +119,24 @@ def main() -> int:
     check("Postpaid offer is labelled simulated", off.get("simulated") is True and off.get("offer_id"))
 
     print("4. closing the galla (slide 6, 9:30 pm)")
-    g = post("/api/galla/scan", files={"image": ("cash.png", PNG, "image/png")}).json()
-    check("galla: counted 6700 vs expected 6850 = -150", abs(g.get("difference", 0) + 150.0) < 0.01, f"counted={g.get('counted')} expected={g.get('expected')} source={g.get('source')}")
-    check("galla message", "150 kam" in str(g.get("message_hi")), str(g.get("message_hi")))
+    if args.live:
+        # No synthetic cash photo: check the expected-cash maths and close with a manual count instead.
+        ge = c.get("/api/galla/expected").json()
+        check("galla expected cash is Rs6,850", abs(ge.get("expected", 0) - 6850.0) < 0.01, str(ge.get("expected")))
+        gc = post("/api/galla/close", json={"denominations": {"500": 8, "200": 5, "100": 11, "50": 6, "20": 10, "10": 10, "coins": 0}, "speak": False}).json()
+        check("galla close: Rs6,700 counted is Rs150 short", abs(gc.get("difference", 0) + 150.0) < 0.01 and "150 kam" in str(gc.get("message_hi")), str(gc.get("message_hi")))
+        print("    (real cash-photo counting needs a real photo: test it by hand with your notes)")
+    else:
+        g = post("/api/galla/scan", files={"image": ("cash.png", PNG, "image/png")}).json()
+        check("galla: counted 6700 vs expected 6850 = -150", abs(g.get("difference", 0) + 150.0) < 0.01, f"counted={g.get('counted')} expected={g.get('expected')} source={g.get('source')}")
+        check("galla message", "150 kam" in str(g.get("message_hi")), str(g.get("message_hi")))
+
+    if args.live:
+        print("4b. handwritten Hindi parchi (live vision)")
+        pr = post("/api/photo/parchi", files={"image": ("parchi.jpg", (TESTDATA / "parchi.jpg").read_bytes(), "image/jpeg")}).json()
+        names = " ".join(l.get("name", "").lower() for l in pr.get("lines", []))
+        check("parchi: all 7 handwritten items matched to the catalog", len(pr.get("lines", [])) == 7 and not pr.get("unmatched"), f"{len(pr.get('lines', []))} lines, unmatched={pr.get('unmatched')}, source={pr.get('source')}")
+        check("parchi: 'aadha kilo paneer' is 0.5 kg", any("paneer" in l.get("name", "").lower() and abs(l.get("qty", 0) - 0.5) < 0.01 for l in pr.get("lines", [])))
 
     print("5. morning brief + reorder (slide 6, 7:00 am)")
     b = c.get("/api/brief/today").json()

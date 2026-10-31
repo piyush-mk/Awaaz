@@ -10,21 +10,31 @@ Paytm already knows how much every kirana earns. Awaaz records what they sell, w
 
 ## Live demo
 
-Deployed at **https://149-28-224-72.sslip.io** (HTTPS, so the microphone and camera work on phones).
+Deployed at **https://65-20-73-34.sslip.io** (HTTPS, so the microphone and camera work on phones).
 
 | Page | Link |
 |---|---|
-| Merchant phone app | https://149-28-224-72.sslip.io/app |
-| Soundbox emulator | https://149-28-224-72.sslip.io/soundbox |
-| WhatsApp simulator | https://149-28-224-72.sslip.io/wa |
-| Status and demo checklist | https://149-28-224-72.sslip.io/status |
-| API docs | https://149-28-224-72.sslip.io/docs |
+| Merchant phone app | https://65-20-73-34.sslip.io/app |
+| Soundbox emulator | https://65-20-73-34.sslip.io/soundbox |
+| WhatsApp simulator | https://65-20-73-34.sslip.io/wa |
+| Status and demo checklist | https://65-20-73-34.sslip.io/status |
+| API docs | https://65-20-73-34.sslip.io/docs |
 
-**Tested** (30 Oct 2026):
-- 359 backend tests pass, with no keys and no network.
-- The end-to-end smoke script, which plays the whole demo story over HTTP, passes 30 of 30 checks against this deployed instance.
+**Tested** (31 Oct 2026, hosted in Mumbai with live Sarvam and OpenRouter keys):
+- 508 backend tests pass, with no keys and no network.
+- The end-to-end smoke script (`scripts/smoke.py --live`) plays the whole demo story over HTTP and passes 35 of 35 checks against the deployed instance, with real vision on a distributor bill (8 of 8 lines, total to the paisa) and a handwritten Hindi list (7 of 7 items).
 - The Soundbox, WhatsApp simulator and phone app were exercised in a headless browser, and live events stream through the HTTPS proxy.
-- The deployed instance runs on built-in fixtures: live Sarvam, Meta WhatsApp and real microphone and camera paths are not yet verified. Each AI result shows a `demo data` chip while on fixtures.
+- Not yet verified: real WhatsApp delivery (simulator only for now), the microphone and camera on a real phone, and how the spoken replies sound.
+
+**Speed** (measured from a laptop in India, live Sarvam):
+
+| | Before | Now |
+|---|---|---|
+| Voice order to cart | 3.0 s | **0.5 s** |
+| Typed order to cart | 1.3 to 1.7 s (LLM) | **under 0.1 s server time** (LLM skipped for plain orders) |
+| Spoken reply | blocked the response (+2 to 4 s) | generated separately, short lines, cached phrases play instantly |
+
+Most of the gain came from running the API in Mumbai instead of the US (speech recognition 1.1 s to 0.25 s, LLM 0.7 s to 0.14 s, every request 330 ms closer), and the rest from the LLM-free fast path and non-blocking speech. Host the API in the same region as your users and the AI provider.
 
 If a page shows stale numbers, press **Reset demo data** on `/status` (the demo shop's data is relative to today).
 

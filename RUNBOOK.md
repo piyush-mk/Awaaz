@@ -27,10 +27,16 @@ Example Caddyfile:
 }
 ```
 
+Host the API close to your users and to the AI provider. Measured from India, the same Sarvam calls were about twice as fast from a Mumbai server as from a US one (speech 1.1 s vs 0.25 s, LLM 0.7 s vs 0.14 s) and every request was 330 ms closer.
+
+When sharing a server with another app, run Awaaz as its own locked-down system user (`useradd --system awaaz`), with its own nginx site, systemd unit (low `Nice`, `MemoryMax`, `ProtectHome`) and port, and never edit the other app's config. Get the certificate with `certbot certonly --webroot` so no other site's config is touched, and run `nginx -t` before every reload.
+
 Redeploy after code changes (builds the frontend locally, syncs, restarts):
 
 ```bash
 AWAAZ_HOST=root@<server> AWAAZ_URL=https://<domain> scripts/deploy.sh
+# non-root login with an isolated service user:
+AWAAZ_HOST=deploy@<server> AWAAZ_RUN_AS=awaaz AWAAZ_URL=https://<domain> scripts/deploy.sh
 ```
 
 Set `PUBLIC_BASE_URL=https://<domain>` in the server `.env`, otherwise receipt links point at `localhost`.

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import ConfirmCard from './ConfirmCard'
 import CustomerSheet from './CustomerSheet'
-import { Chip } from './ui'
 import { confirmAction, cancelAction } from '../../api/client'
 import { inr, qtyLabel } from '../../lib/format'
 import { useApp } from './AppContext'
@@ -20,8 +19,8 @@ function Detail({ action }) {
   switch (action.kind) {
     case 'checkout':
       return (
-        <div className="text-ink-3 text-sm">
-          {p.item_count} item . <span className="font-bold text-ink text-lg">{inr(p.total)}</span>
+        <div className="flex items-baseline justify-between text-ink-3 text-sm">
+          {p.item_count} item <span className="font-semibold text-ink text-lg tabular">{inr(p.total)}</span>
         </div>
       )
     case 'split_payment':
@@ -50,12 +49,9 @@ function Detail({ action }) {
             <span className="text-xl font-bold tabular">{inr(p.amount)}</span>
           </div>
           <div className="text-sm text-ink-3 tabular">
-            Baaki {inr(p.balance_before)} {'->'} {inr(Math.max(p.balance_after, 0))}
+            Baaki {inr(p.balance_before)} se {inr(Math.max(p.balance_after, 0))} ho jayega
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {p.late_payments > 0 && <Chip tone="red">{p.late_payments} baar late</Chip>}
-            {p.risk === 'high' && <Chip tone="red">risk high</Chip>}
-          </div>
+          {p.late_payments > 0 && <div className="text-sm font-medium text-orange-800">{p.late_payments} baar late chukaya</div>}
         </div>
       )
     case 'restock':
@@ -104,7 +100,6 @@ export default function ActionCard({ action, onResolved }) {
   return (
     <>
       <ConfirmCard
-        title="Pehle puchh raha hoon"
         question={QUESTIONS[action.kind] || p.summary || 'Karun?'}
         source={action.source}
         latency={action.latency_ms}

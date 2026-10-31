@@ -22,16 +22,16 @@ export default function ConfirmCard({
 }) {
   const ring = tone === 'orange' ? 'border-accent' : 'border-paytm-blue'
   return (
-    <div className={`bg-white rounded-2xl border-2 ${ring} p-4 shadow-sm`}>
+    <div className={`bg-white rounded-2xl border-2 ${ring} p-4`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          {title && <div className="text-xs font-semibold uppercase tracking-wider text-ink-3">{title}</div>}
-          {question && <div className="font-hindi text-xl font-bold text-ink leading-snug">{question}</div>}
+          {title && <div className="text-sm text-ink-3">{title}</div>}
+          {question && <div className="font-hindi text-xl font-semibold text-ink leading-snug">{question}</div>}
         </div>
         <SourceChip source={source} latency={latency} demo={demo} />
       </div>
       {warn && (
-        <div className="mt-2 rounded-xl bg-orange-50 border border-orange-200 px-3 py-2 text-sm font-medium text-orange-900">
+        <div className="mt-2 rounded-xl bg-orange-50 px-3 py-2 text-sm font-medium text-orange-900">
           {warn}
         </div>
       )}
@@ -40,14 +40,14 @@ export default function ConfirmCard({
         <button
           onClick={onNo}
           disabled={busy}
-          className="min-h-[56px] rounded-xl bg-white border-2 border-line text-ink font-hindi text-xl font-bold flex items-center justify-center gap-2 active:bg-bg-app disabled:opacity-50"
+          className="min-h-[56px] rounded-xl bg-bg-app text-ink font-hindi text-xl font-semibold flex items-center justify-center gap-2 active:bg-line disabled:opacity-50"
         >
           <X size={22} /> {noLabel}
         </button>
         <button
           onClick={onYes}
           disabled={busy}
-          className="min-h-[56px] rounded-xl bg-paytm-blue text-ink font-hindi text-xl font-bold flex items-center justify-center gap-2 active:bg-paytm-blue-dark disabled:opacity-50"
+          className="min-h-[56px] rounded-xl bg-ink text-white font-hindi text-xl font-semibold flex items-center justify-center gap-2 active:bg-ink-2 disabled:opacity-50"
         >
           <Check size={22} /> {busy ? '...' : yesLabel}
         </button>

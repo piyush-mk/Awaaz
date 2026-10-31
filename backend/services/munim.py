@@ -345,7 +345,7 @@ NOT_UNDERSTOOD = ("Yeh sawaal abhi samajh nahi aaya. Aap sale, stock, udhaar, ex
                   "mein pooch sakte hain.")
 
 REPHRASE_SYSTEM = (
-    "Tum Ramesh General Store ke munim ho. User ke sawaal ka jawab sirf neeche diye 'results' se do, "
+    "Tum Ramesh General Store ki dukaan ke AI sahayak ho. User ke sawaal ka jawab sirf neeche diye 'results' se do, "
     "1 se 3 chhote Hinglish (roman) vaakya mein, bolne layak. Koi number invent ya round mat karo; sirf "
     "results ke numbers digits mein likho. Rupaye ₹ ke saath. Bullet ya table mat banao."
 )
@@ -354,7 +354,7 @@ REPHRASE_SYSTEM = (
 async def _llm_pick_tools(question: str) -> tuple[list[tuple[str, dict]], str, int]:
     messages = [
         {"role": "system", "content": (
-            "Tum Ramesh General Store ke munim ho. Dukaan ke sawaal ka jawab dene ke liye diye gaye "
+            "Tum Ramesh General Store ki dukaan ke AI sahayak ho. Dukaan ke sawaal ka jawab dene ke liye diye gaye "
             "read-only tools chalao. Kabhi jawab khud mat banao; hamesha ek ya zyada tool chuno.")},
         {"role": "user", "content": question},
     ]

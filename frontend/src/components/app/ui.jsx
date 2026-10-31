@@ -2,20 +2,36 @@ import { useEffect } from 'react'
 import { AlertTriangle, Loader2, X } from 'lucide-react'
 import SourceChip from './SourceChip'
 
+/** A quiet grouped block. Lists use `Rows` instead, so the screen is not a stack of boxes. */
 export function Card({ className = '', children, ...rest }) {
   return (
-    <div className={`bg-white rounded-2xl border border-line p-4 ${className}`} {...rest}>
+    <div className={`bg-bg-app rounded-2xl p-4 ${className}`} {...rest}>
       {children}
+    </div>
+  )
+}
+
+/** Full-width rows split by hairlines. */
+export function Rows({ className = '', children }) {
+  return <ul className={`divide-y divide-line border-y border-line -mx-4 ${className}`}>{children}</ul>
+}
+
+/** The one number a screen leads with. */
+export function Hero({ value, sub, tone = '', className = '' }) {
+  return (
+    <div className={className}>
+      <div className={`text-[44px] font-semibold tabular tracking-tight leading-none ${tone}`}>{value}</div>
+      {sub && <div className="mt-2 text-[15px] text-ink-3">{sub}</div>}
     </div>
   )
 }
 
 export function SectionTitle({ hi, en, right }) {
   return (
-    <div className="flex items-end justify-between px-1 mb-2">
+    <div className="flex items-end justify-between mb-2">
       <div>
-        <h2 className="font-hindi text-xl font-bold leading-tight text-ink">{hi}</h2>
-        {en && <div className="text-xs font-medium text-ink-3 tracking-wide">{en}</div>}
+        <h2 className="font-hindi text-lg font-semibold leading-tight text-ink">{hi}</h2>
+        {en && <div className="text-sm text-ink-3">{en}</div>}
       </div>
       {right}
     </div>
@@ -61,8 +77,8 @@ export function Spinner({ size = 20, className = '' }) {
 export function Empty({ icon: Icon, hi, en, children }) {
   return (
     <div className="flex flex-col items-center text-center py-10 px-6 text-ink-3">
-      {Icon && <Icon size={36} className="mb-3 text-ink-3/60" strokeWidth={1.5} />}
-      <div className="font-hindi text-xl font-bold text-ink">{hi}</div>
+      {Icon && <Icon size={32} className="mb-3 text-ink-3/60" strokeWidth={1.5} />}
+      <div className="font-hindi text-lg font-semibold text-ink">{hi}</div>
       {en && <div className="text-sm mt-0.5">{en}</div>}
       {children && <div className="mt-4">{children}</div>}
     </div>
@@ -72,10 +88,10 @@ export function Empty({ icon: Icon, hi, en, children }) {
 export function ErrorBox({ error, onRetry }) {
   if (!error) return null
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 flex gap-3 items-start">
+    <div className="rounded-2xl bg-red-50 p-4 flex gap-3 items-start">
       <AlertTriangle size={20} className="text-stock-red flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <div className="font-hindi font-bold text-ink">Kuch gadbad ho gayi</div>
+        <div className="font-hindi font-semibold text-ink">Kuch gadbad ho gayi</div>
         <div className="text-sm text-ink-3 break-words">{error.message || String(error)}</div>
         {onRetry && (
           <button onClick={() => onRetry()} className="mt-2 min-h-[44px] px-4 rounded-xl bg-ink text-white font-semibold text-sm">
@@ -91,9 +107,9 @@ const BTN = {
   primary: 'bg-paytm-blue text-ink active:bg-paytm-blue-dark',
   navy: 'bg-ink text-white active:bg-ink-2',
   accent: 'bg-accent text-ink active:bg-paytm-orange-dark',
-  ghost: 'bg-white text-ink border border-line active:bg-bg-app',
-  danger: 'bg-red-50 text-red-700 border border-red-200 active:bg-red-100',
-  green: 'bg-stock-green text-white active:opacity-90',
+  ghost: 'bg-bg-app text-ink active:bg-line',
+  danger: 'bg-red-50 text-red-700 active:bg-red-100',
+  green: 'bg-green-700 text-white active:bg-green-800',
 }
 
 export function Btn({ variant = 'primary', size = 'md', busy, disabled, icon: Icon, children, className = '', ...rest }) {
@@ -110,24 +126,44 @@ export function Btn({ variant = 'primary', size = 'md', busy, disabled, icon: Ic
   )
 }
 
+/** Sections inside a room: underlined text, not pills. */
 export function Tabs({ items, value, onChange }) {
   return (
-    <div className="flex gap-2 overflow-x-auto app-scroll px-4 py-2 -mx-4">
+    <div className="flex gap-5 overflow-x-auto app-scroll px-4 -mx-4 border-b border-line" role="tablist">
       {items.map((t) => {
         const active = t.id === value
         return (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={active}
             onClick={() => onChange(t.id)}
-            className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-semibold border transition-colors ${
-              active ? 'bg-ink text-white border-ink' : 'bg-white text-ink-3 border-line'
+            className={`flex-shrink-0 min-h-[44px] text-base whitespace-nowrap transition-colors ${
+              active ? 'text-ink font-semibold shadow-[inset_0_-2px_0_#0E1B33]' : 'text-ink-3 font-medium'
             }`}
           >
-            <span className="font-hindi text-base">{t.hi}</span>
-            <span className={`ml-1.5 text-xs ${active ? 'opacity-70' : 'opacity-60'}`}>{t.en}</span>
+            {t.label}
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** Sort and filter choices: plain text, clearly lighter than Tabs. */
+export function Filters({ items, value, onChange }) {
+  return (
+    <div className="flex gap-1 overflow-x-auto app-scroll -mx-4 px-3">
+      {items.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => onChange(s.id)}
+          aria-pressed={value === s.id}
+          className={`flex-shrink-0 min-h-[44px] px-2.5 text-sm whitespace-nowrap ${value === s.id ? 'text-ink font-semibold underline underline-offset-4' : 'text-ink-3 font-medium'}`}
+        >
+          {s.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -136,15 +172,15 @@ export function Stepper({ value, onChange, step = 1, min = 0, unit }) {
   const dec = () => onChange(Math.max(min, Math.round((Number(value) - step) * 1000) / 1000))
   const inc = () => onChange(Math.round((Number(value) + step) * 1000) / 1000)
   return (
-    <div className="inline-flex items-center rounded-xl border border-line bg-white">
-      <button onClick={dec} aria-label="kam" className="w-11 h-11 flex items-center justify-center text-xl font-bold text-ink active:bg-bg-app rounded-l-xl">
+    <div className="inline-flex items-center rounded-xl bg-bg-app">
+      <button onClick={dec} aria-label="kam" className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-l-xl">
         &minus;
       </button>
       <div className="min-w-[44px] px-1 text-center font-semibold tabular text-ink">
         {value}
         {unit ? <span className="text-xs text-ink-3 ml-0.5">{unit}</span> : null}
       </div>
-      <button onClick={inc} aria-label="zyada" className="w-11 h-11 flex items-center justify-center text-xl font-bold text-ink active:bg-bg-app rounded-r-xl">
+      <button onClick={inc} aria-label="zyada" className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-r-xl">
         +
       </button>
     </div>
@@ -163,12 +199,14 @@ export function Sheet({ open, onClose, title, children }) {
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/50" onClick={onClose}>
       <div
-        className="sheet-up w-full max-w-[430px] max-h-[88vh] overflow-y-auto app-scroll bg-bg-app rounded-t-3xl p-4 pb-6"
+        role="dialog"
+        aria-label={title}
+        className="sheet-up w-full max-w-[430px] max-h-[88vh] overflow-y-auto app-scroll bg-white rounded-t-3xl p-4 pb-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-hindi text-xl font-bold text-ink">{title}</h3>
-          <button onClick={onClose} aria-label="band karo" className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-line">
+          <h3 className="font-hindi text-xl font-semibold text-ink">{title}</h3>
+          <button onClick={onClose} aria-label="band karo" className="w-11 h-11 flex items-center justify-center rounded-full bg-bg-app">
             <X size={20} />
           </button>
         </div>
@@ -189,7 +227,7 @@ export function Field({ label, children, hint }) {
 }
 
 export const inputCls =
-  'w-full min-h-[48px] rounded-xl border border-line bg-white px-3 text-base text-ink placeholder:text-ink-3/60 focus:outline-none focus:ring-2 focus:ring-paytm-blue'
+  'w-full min-h-[48px] rounded-xl border border-line bg-white px-3 text-base text-ink placeholder:text-ink-3/70 focus:outline-none focus:ring-2 focus:ring-paytm-blue'
 
 /** Result line under any AI output: spoken reply, then the source chip. */
 export function ReplyLine({ text, source, latency, demo, className = '' }) {

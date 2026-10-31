@@ -251,21 +251,21 @@ export const setPrices = (items) => post('/stock/prices', { items })
 // Hisaab
 export const getDashboardV2 = () => request('/dashboard/v2')
 
-// Salaah: brief, reorder, munim
+// Salaah: brief, reorder, questions about the shop
 export const getBrief = (params) => request(`/brief/today${qs(params)}`)
 export const speakBrief = (text) => post('/brief/speak', text ? { text } : {})
 export const playBrief = () => post('/brief/play')
 export const draftReorder = (supplierId) => post('/reorder/draft', supplierId ? { supplier_id: supplierId } : {})
 export const listReorders = (params) => request(`/reorder${qs(params)}`)
 export const sendReorder = (orderId, edits, note) => post(`/reorder/${orderId}/send`, { edits: edits || [], note })
-export const getMunimExamples = () => request('/munim/examples')
-export function askMunim({ text, audio, speak = true } = {}) {
+export const getAskExamples = () => request('/ask/examples')
+export function askShop({ text, audio, speak = true } = {}) {
   if (audio) {
     const form = new FormData()
     form.append('audio', audio, `question.${extFor(audio)}`)
-    return request(`/munim/ask${qs({ speak })}`, { method: 'POST', body: form })
+    return request(`/ask${qs({ speak })}`, { method: 'POST', body: form })
   }
-  return post(`/munim/ask${qs({ speak })}`, { text })
+  return post(`/ask${qs({ speak })}`, { text })
 }
 
 // WhatsApp orders placed by customers

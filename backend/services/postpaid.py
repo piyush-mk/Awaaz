@@ -90,7 +90,7 @@ def create_offer(db: Session, customer: Customer, amount: float, invoice_id: Opt
                            f"{msg}\n{link}\nSimulated: yeh sirf demo hai, asli paise nahi kate.",
                            customer_id=customer.id)
         out["whatsapp"] = {"message_id": wa_msg.id, "status": wa_msg.status, "simulated": True}
-    events.publish("store", "postpaid_offered", {
+    events.publish_after_commit(db, "store", "postpaid_offered", {
         "simulated": True, "offer_id": action.id, "customer_id": customer.id, "customer": customer.name,
         "amount": amount, "eligible": eligible, "limit": limit, "invoice_id": invoice_id})
     return out
@@ -133,7 +133,7 @@ def approve(db: Session, action: PendingAction) -> dict[str, Any]:
         f"Paytm Postpaid se ₹{fmt_inr(amount)} ka bhugtaan ho gaya. Dhanyavaad {name}! "
         f"Simulated: yeh sirf demo hai, asli paise nahi kate.",
         customer_id=customer.id if customer else None)
-    events.publish("store", "postpaid_approved", {
+    events.publish_after_commit(db, "store", "postpaid_approved", {
         "simulated": True, "offer_id": action.id, "customer_id": p["customer_id"], "customer": p["customer"],
         "amount": amount, "invoice_id": invoice_id, "payment_id": payment.id, "order_id": payment.order_id,
         "message": f"{p['customer']} ne Postpaid se ₹{fmt_inr(amount)} diye. Paise abhi mil gaye {SIMULATED_TAG}."})

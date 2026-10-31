@@ -30,7 +30,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Awaaz: the AI Munim", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="Awaaz", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,7 +71,7 @@ app.include_router(khata.public_router, prefix="/k", tags=["Khata"])
 
 @app.get("/")
 def root():
-    return {"status": "ok", "app": "Awaaz: the AI Munim", "version": "2.0.0"}
+    return {"status": "ok", "app": "Awaaz", "version": "2.0.0"}
 
 
 @app.get("/health")

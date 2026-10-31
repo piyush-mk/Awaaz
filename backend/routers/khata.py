@@ -182,7 +182,7 @@ def dispute_entry(entry_id: int, payload: ConfirmIn = Body(default_factory=Confi
     e = _entry_or_404(db, entry_id)
     kh.set_confirmation(db, e, False, payload.note or "marked by shopkeeper")
     c = db.get(Customer, e.customer_id)
-    events.publish("store", "khata_disputed", {
+    events.publish_after_commit(db, "store", "khata_disputed", {
         "entry_id": e.id, "customer_id": e.customer_id, "customer": c.name if c else None,
         "amount": e.amount, "balance": kh.balance(db, e.customer_id), "text": payload.note or ""})
     db.commit()
@@ -224,7 +224,7 @@ def reminders_send(payload: ReminderIn = Body(default_factory=ReminderIn), db: S
         msg = wa.notify(db, r["phone"], r["text"], customer_id=r["customer_id"])
         sent.append({"customer_id": r["customer_id"], "name": r["name"], "balance": r["balance"],
                      "message_id": msg.id, "status": msg.status, "has_phone": r["has_phone"]})
-    events.publish("store", "khata_reminders_sent", {"count": len(sent), "total_due": _reminder_header(rows)["total_due"]})
+    events.publish_after_commit(db, "store", "khata_reminders_sent", {"count": len(sent), "total_due": _reminder_header(rows)["total_due"]})
     db.commit()
     return {**_reminder_header(rows), "sent": sent}
 
@@ -427,7 +427,7 @@ def import_confirm(action_id: int, payload: ImportConfirmIn = Body(default_facto
     action.status = "confirmed"
     action.resolved_at = now_local()
     action.result = result
-    events.publish("store", "khata_imported", {"action_id": action.id, **{
+    events.publish_after_commit(db, "store", "khata_imported", {"action_id": action.id, **{
         k: result[k] for k in ("total_imported", "skipped")}, "customers": len(result["created_customers"]),
         "entries": len(result["entries"])})
     db.commit()

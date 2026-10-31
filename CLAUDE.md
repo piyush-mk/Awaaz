@@ -1,4 +1,4 @@
-# Awaaz: the AI munim (CLAUDE.md)
+# Awaaz (CLAUDE.md)
 
 ## What this is
 Awaaz is a voice and camera AI manager for kirana stores, built for the Paytm Build for India AI Hackathon (Delhi, 31 Oct 2026, Track 1: Merchant Growth AI). The merchant speaks or points a phone camera; the shop's billing, stock, udhaar and accounts are recorded without typing. Sarvam AI is the official AI partner, so Sarvam models are preferred everywhere. Product vision: PRODUCT.md. Architecture: docs/ARCHITECTURE.md. Deploy and keys: RUNBOOK.md. Demo script: docs/DEMO.md.
@@ -18,6 +18,7 @@ cd frontend && npm install && npm run dev          # http://localhost:5173 (prox
 # Tests
 cd backend && .venv/bin/pytest -q                  # 359 tests, no keys, no network
 python scripts/smoke.py --base http://localhost:8000   # whole demo story over HTTP (resets demo data)
+cd frontend && node scripts/check-ui.mjs --base http://localhost:5173   # every feature in real Chrome across phone, Soundbox and WhatsApp (resets demo data)
 ```
 
 ## Layout
@@ -35,9 +36,11 @@ python scripts/smoke.py --base http://localhost:8000   # whole demo story over H
 - No API contract changes without telling the other person: endpoint shapes are covered by tests.
 
 ## UI
-- Palette: ink navy `#0E1B33` / `#1B2330`, Paytm cyan `#00B9F5`, accent orange `#FF8A1F`, background `#ECF0F4`. IBM Plex Sans plus Noto Sans Devanagari.
+- White screens, hairline rows, one number leads each screen. Palette: ink navy `#0E1B33`, Paytm cyan `#00B9F5`, accent orange `#FF8A1F`, surface `#F1F4F7`. IBM Plex Sans plus Noto Sans Devanagari.
 - Mobile first (375px), touch targets at least 44px, Hindi headings large, no emoji (lucide-react icons).
-- Rooms (bottom nav): Counter, Godown, Khata, Hisaab, Salaah.
+- Bottom nav: Counter, Godown, mic, Khata, Hisaab. Salaah opens from the header. The mic works in every room (`components/app/VoiceContext.jsx`); the room decides what speech means.
+- Do not call the product a munim in any user-visible text. `services/munim.py` and `/api/munim/*` are internal names kept for compatibility.
+- Publish events with `events.publish_after_commit(db, ...)` when a commit is still to come, so screens that refetch read new data.
 
 ## Writing style for docs and copy
 Plain language, no em-dashes, no claims about literacy, and say "Indian languages mixed with English" rather than naming a single dialect.

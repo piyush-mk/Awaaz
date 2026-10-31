@@ -17,10 +17,17 @@ const EVENT_TYPES = [
   'stock_updated',
   'wa_order',
   'wa_order_updated',
+  'khata_updated',
+  'khata_confirmed',
   'khata_disputed',
   'khata_imported',
+  'khata_reminders_sent',
+  'postpaid_offered',
+  'postpaid_approved',
+  'reorder_sent',
   'galla_closed',
   'brief_ready',
+  'demo_reset',
 ]
 
 export function AppProvider({ children }) {
@@ -50,7 +57,7 @@ export function AppProvider({ children }) {
       ),
     [],
   )
-  const connected = useEvents('store', handlers)
+  const connected = useEvents('store', handlers, { skipHistory: true })
 
   useEffect(() => {
     let alive = true

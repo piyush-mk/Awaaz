@@ -26,7 +26,7 @@ const STATES = {
 const NAMES = {
   sarvam_stt: ['Sarvam STT', 'Saaras: speech to text'],
   sarvam_tts: ['Sarvam TTS', 'Bulbul: text to speech'],
-  sarvam_chat: ['Sarvam Chat', 'LLM: cart tools, brief, munim'],
+  sarvam_chat: ['Sarvam Chat', 'LLM: cart tools, brief, questions'],
   sarvam_vision: ['Sarvam Vision', 'Bills, parchi, khata page, galla'],
   paytm_llm: ['Paytm LLM', 'Secondary chat provider'],
   xai: ['xAI Grok', 'Vision fallback'],

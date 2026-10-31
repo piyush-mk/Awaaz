@@ -45,7 +45,7 @@ export default function ImportSheet({ proposal, onClose, onDone }) {
           </div>
           <ul className="space-y-2">
             {rows.map((r, i) => (
-              <li key={i} className={`rounded-2xl border bg-white p-3 ${r.include ? 'border-line' : 'border-line opacity-50'}`}>
+              <li key={i} className={`rounded-2xl bg-bg-app p-3 ${r.include ? '' : 'opacity-50'}`}>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"

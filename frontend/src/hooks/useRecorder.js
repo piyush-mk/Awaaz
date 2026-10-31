@@ -176,6 +176,21 @@ export default function useRecorder({ onAudio, vad } = {}) {
     if (blob && durationMs > 300) deliver(blob, { filename: `utterance.${extFor(blob.type)}`, mode: 'ptt', durationMs })
   }, [deliver, releaseStream, stopRecorder])
 
+  /** Abandon a push-to-talk recording: nothing is sent. */
+  const cancelPTT = useCallback(async () => {
+    const e = E.current
+    e.pttWanted = false
+    clearTimeout(e.pttTimer)
+    if (e.mode !== 'ptt') return
+    e.mode = 'idle'
+    clearInterval(e.timer)
+    setMode('idle')
+    setPhase('idle')
+    setLevel(0)
+    await stopRecorder()
+    releaseStream()
+  }, [releaseStream, stopRecorder])
+
   const startPTT = useCallback(async () => {
     const e = E.current
     if (e.mode !== 'idle') return false
@@ -344,6 +359,7 @@ export default function useRecorder({ onAudio, vad } = {}) {
     handsFree: mode === 'handsfree',
     startPTT,
     stopPTT,
+    cancelPTT,
     startHandsFree,
     stopHandsFree,
     setSuspended,

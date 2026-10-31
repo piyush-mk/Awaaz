@@ -46,7 +46,7 @@ export default function RemindersSheet({ open, onClose }) {
           </div>
           <ul className="space-y-2">
             {data.reminders.map((r) => (
-              <li key={r.customer_id} className="bg-white rounded-xl border border-line p-3">
+              <li key={r.customer_id} className="bg-bg-app rounded-xl p-3">
                 <div className="flex items-center justify-between">
                   <span className="font-hindi text-lg font-bold">{r.name}</span>
                   <span className="font-bold tabular">{inr(r.balance)}</span>

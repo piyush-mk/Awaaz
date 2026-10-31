@@ -83,7 +83,7 @@ export default function EntrySheet({ open, kind, customer, onClose, onChanged })
           </Field>
           <div className="flex gap-2">
             {[100, 200, 500, 1000].map((q) => (
-              <button key={q} onClick={() => setAmount(String(q))} className="flex-1 min-h-[44px] rounded-xl bg-white border border-line font-semibold tabular">{q}</button>
+              <button key={q} onClick={() => setAmount(String(q))} className="flex-1 min-h-[44px] rounded-xl bg-bg-app font-semibold tabular">{q}</button>
             ))}
           </div>
           <Field label="Note (optional)">
@@ -106,16 +106,16 @@ export default function EntrySheet({ open, kind, customer, onClose, onChanged })
           onNo={() => setStep('form')}
           tone={credit ? 'orange' : 'blue'}
         >
-          <div className="tabular text-ink-3">Baaki {inr(customer.balance)} {'->'} <b className="text-ink text-lg">{inr(Math.max(after, 0))}</b></div>
+          <div className="tabular text-ink-3">Baaki {inr(customer.balance)} se <b className="text-ink text-lg">{inr(Math.max(after, 0))}</b> ho jayega</div>
           <div className="mt-1 text-xs text-ink-3">Customer ko WhatsApp jayega</div>
         </ConfirmCard>
       )}
 
       {step === 'result' && result && (
         <div className="space-y-3">
-          <div className="rounded-2xl bg-white border border-line p-4 text-center">
+          <div className="rounded-2xl bg-bg-app p-4 text-center">
             <div className="font-hindi text-xl font-bold">{credit ? 'Khate mein likh diya' : 'Jama ho gaya'}</div>
-            <div className="text-ink-3 tabular">Baaki {inr(result.balance_before)} {'->'} <b className="text-ink">{inr(result.balance_after)}</b></div>
+            <div className="text-ink-3 tabular">Baaki {inr(result.balance_before)} se <b className="text-ink">{inr(result.balance_after)}</b></div>
           </div>
           {result.whatsapp && (
             <div className="rounded-2xl bg-[#DCF8C6] p-3">
@@ -126,7 +126,7 @@ export default function EntrySheet({ open, kind, customer, onClose, onChanged })
             </div>
           )}
           {result.warning?.over_limit && (
-            <div className="rounded-2xl bg-orange-50 border-2 border-accent p-3">
+            <div className="rounded-2xl bg-orange-50 p-3">
               <div className="font-hindi font-bold text-orange-900">{result.warning.message_hi}</div>
               {result.warning.postpaid_available && !offer && (
                 <Btn variant="accent" className="w-full mt-3" busy={busy} onClick={makeOffer}>Paytm Postpaid offer bhejein</Btn>

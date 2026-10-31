@@ -30,6 +30,8 @@ export default function Galla() {
 
   useStoreEvent('payment_received', () => reload({ quiet: true }))
   useStoreEvent('galla_closed', () => reload({ quiet: true }))
+  useStoreEvent('checkout', () => reload({ quiet: true }))
+  useStoreEvent('demo_reset', () => reload({ quiet: true }))
 
   const startManual = () => {
     setScan(null)
@@ -116,12 +118,12 @@ export default function Galla() {
               <SourceChip source={scan.source} latency={scan.latency_ms} demo={scan.demo_mode} />
             </div>
           )}
-          <div className="bg-white rounded-2xl border border-line overflow-hidden">
+          <div className="divide-y divide-line">
             {DENOMS.map((d) => {
               const conf = scan?.denomination_confidence?.[d]
               const low = conf != null && conf < 0.8
               return (
-                <div key={d} className={`flex items-center gap-3 px-3 py-2 border-b border-line last:border-0 ${low ? 'bg-yellow-50' : ''}`}>
+                <div key={d} className={`flex items-center gap-3 py-2 ${low ? 'bg-yellow-50' : ''}`}>
                   <div className="w-16 font-bold tabular text-lg">{inr(d)}</div>
                   <span className="text-ink-3">x</span>
                   <input
@@ -135,7 +137,7 @@ export default function Galla() {
                 </div>
               )
             })}
-            <div className="flex items-center gap-3 px-3 py-2">
+            <div className="flex items-center gap-3 py-2">
               <div className="w-16 font-bold">Sikke</div>
               <span className="text-ink-3">=</span>
               <input
@@ -148,7 +150,7 @@ export default function Galla() {
             </div>
           </div>
           {scan?.low_confidence_flags?.map((f) => (
-            <div key={f.denomination} className="rounded-xl bg-yellow-50 border border-yellow-300 px-3 py-2 text-sm font-medium text-yellow-900">{f.message}</div>
+            <div key={f.denomination} className="rounded-xl bg-yellow-50 px-3 py-2 text-sm font-medium text-yellow-900">{f.message}</div>
           ))}
 
           <div className={`rounded-2xl p-4 text-center ${diff.tone === 'green' ? 'bg-green-50' : diff.tone === 'red' ? 'bg-red-50' : 'bg-yellow-50'}`}>

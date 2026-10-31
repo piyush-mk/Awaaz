@@ -8,20 +8,22 @@ export default function Toast({ message, type = 'success', onClose }) {
   }, [onClose])
 
   const styles = {
-    success: 'bg-stock-green text-white',
-    error: 'bg-stock-red text-white',
-    warning: 'bg-stock-yellow text-gray-900',
+    success: 'bg-ink text-white',
+    error: 'bg-red-700 text-white',
+    warning: 'bg-accent text-ink',
   }
 
   const Icon = type === 'success' ? CheckCircle : AlertTriangle
 
   return (
-    <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-[380px] z-50 animate-slide-up rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg ${styles[type]}`}>
-      <Icon size={20} className="flex-shrink-0" />
-      <span className="text-sm font-medium flex-1">{message}</span>
-      <button onClick={onClose} className="flex-shrink-0 opacity-75">
-        <X size={16} />
-      </button>
+    <div className="fixed bottom-28 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+      <div role="status" className={`pointer-events-auto w-full max-w-[380px] animate-slide-up rounded-xl px-4 py-3 flex items-center gap-3 shadow-lg ${styles[type]}`}>
+        <Icon size={20} className="flex-shrink-0" />
+        <span className="text-sm font-medium flex-1">{message}</span>
+        <button onClick={onClose} aria-label="Sandesh hatayein" className="flex-shrink-0 opacity-75">
+          <X size={16} />
+        </button>
+      </div>
     </div>
   )
 }

@@ -36,6 +36,8 @@ function OrderCard({ order, onResolved }) {
     try {
       if (p.customer_id) await attachCartCustomer(sessionId, { customer_id: p.customer_id }).catch(() => {})
       await addCartLines(sessionId, p.lines.map((l) => ({ product_id: l.product_id, qty: l.qty, unit: l.unit })), 'add')
+      // The order is now being billed: take it off this list and tell the customer.
+      await confirmWaOrder(order.id).catch(() => {})
       showToast('Counter par bill taiyaar')
       navigate('/app/counter')
     } catch (e) {
@@ -87,6 +89,7 @@ export default function WaOrders() {
   const { data, loading, error, reload } = useLoad(() => listWaOrders('proposed'), [])
   useStoreEvent('wa_order', () => reload({ quiet: true }))
   useStoreEvent('wa_order_updated', () => reload({ quiet: true }))
+  useStoreEvent('demo_reset', () => reload({ quiet: true }))
 
   return (
     <div className="space-y-3">

@@ -88,9 +88,9 @@ const RECIPES = [
   { g: 'Brief', id: 'r-draft', label: 'Reorder: draft POs', m: 'POST', p: '/api/reorder/draft', json: '{}' },
   { g: 'Brief', id: 'r-list', label: 'Reorder: list', m: 'GET', p: '/api/reorder' },
   { g: 'Brief', id: 'r-send', label: 'Reorder: send to supplier', m: 'POST', p: '/api/reorder/{action_id}/send', json: '{}' },
-  { g: 'Brief', id: 'm-ask', label: 'Ask munim (text)', m: 'POST', p: '/api/munim/ask', json: J({ text: 'is hafte sabse zyada kya bika' }) },
-  { g: 'Brief', id: 'm-ask-a', label: 'Ask munim (audio + phrase)', m: 'POST', p: '/api/munim/ask', form: [], file: { name: 'audio', accept: 'audio/*', dummy: true }, phrase: '' },
-  { g: 'Brief', id: 'm-ex', label: 'Munim examples', m: 'GET', p: '/api/munim/examples' },
+  { g: 'Brief', id: 'm-ask', label: 'Ask (text)', m: 'POST', p: '/api/munim/ask', json: J({ text: 'is hafte sabse zyada kya bika' }) },
+  { g: 'Brief', id: 'm-ask-a', label: 'Ask (audio + phrase)', m: 'POST', p: '/api/munim/ask', form: [], file: { name: 'audio', accept: 'audio/*', dummy: true }, phrase: '' },
+  { g: 'Brief', id: 'm-ex', label: 'Ask examples', m: 'GET', p: '/api/munim/examples' },
 
   { g: 'WhatsApp', id: 'w-status', label: 'Status', m: 'GET', p: '/api/wa/status' },
   { g: 'WhatsApp', id: 'w-conv', label: 'Conversations', m: 'GET', p: '/api/wa/conversations' },

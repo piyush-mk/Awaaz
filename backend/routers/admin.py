@@ -97,7 +97,7 @@ def get_status(db: Session = Depends(get_db)):
         effective, note = "fixtures_no_key", "SARVAM_API_KEY nahi hai: fixtures/rules se chal raha hai"
     services = health.snapshot()
     return {
-        "app": "Awaaz: the AI Munim", "version": "2.0.0", "store": settings.merchant_name,
+        "app": "Awaaz", "version": "2.0.0", "store": settings.merchant_name,
         "time_ist": now.strftime("%Y-%m-%d %H:%M:%S") + " IST", "time_iso": now.isoformat(timespec="seconds"),
         "build": {"commit": _commit_hash(), "python_env": "venv" if os.getenv("VIRTUAL_ENV") else "system"},
         "demo_mode": {"setting": settings.demo_mode, "effective": effective, "note": note},

@@ -1,5 +1,5 @@
 import { Check, ExternalLink, Plus } from 'lucide-react'
-import { Btn, Chip } from './ui'
+import { Btn } from './ui'
 import { inr, toPath } from '../../lib/format'
 
 /** Success screen after payment_received (or a cash/khata-only bill). */
@@ -8,27 +8,27 @@ export default function PaidView({ data, onNew }) {
   const low = data.low_stock || []
   const receipt = data.receipt_url || data.invoice?.receipt_url
   return (
-    <div className="bg-white rounded-2xl border border-line p-5 text-center">
-      <div className="mx-auto w-20 h-20 rounded-full bg-stock-green flex items-center justify-center animate-checkmark">
+    <div className="bg-white rounded-2xl p-5 text-center">
+      <div className="mx-auto w-20 h-20 rounded-full bg-green-700 flex items-center justify-center animate-checkmark">
         <Check size={44} className="text-white" strokeWidth={3} />
       </div>
-      <div className="mt-3 font-hindi text-2xl font-bold text-ink">Payment mil gaya</div>
-      <div className="text-5xl font-bold tabular text-ink mt-1">{inr(amount)}</div>
+      <div className="mt-3 font-hindi text-2xl font-semibold text-ink">Payment mil gaya</div>
+      <div className="text-[44px] leading-none font-semibold tabular text-ink mt-2">{inr(amount)}</div>
       {(data.number || data.invoice?.number) && (
-        <div className="mt-1 text-sm text-ink-3 font-mono">{data.number || data.invoice?.number}</div>
+        <div className="mt-2 text-sm text-ink-3">{data.number || data.invoice?.number}</div>
       )}
       {data.spoken_text && <p className="mt-3 font-hindi text-lg text-ink">{data.spoken_text}</p>}
 
       {low.length > 0 && (
         <div className="mt-4 text-left">
-          <div className="text-xs font-semibold uppercase tracking-wider text-ink-3 mb-1.5">Stock kam ho raha hai</div>
-          <ul className="space-y-1.5">
+          <div className="text-sm font-semibold text-ink-3 mb-1.5">Stock kam ho raha hai</div>
+          <ul className="divide-y divide-line">
             {low.map((l) => (
-              <li key={l.product_id} className="flex items-center justify-between rounded-xl bg-orange-50 border border-orange-200 px-3 py-2">
-                <span className="font-hindi text-base font-bold">{l.name}</span>
-                <Chip tone={l.level === 'low' ? 'red' : 'yellow'}>
+              <li key={l.product_id} className="flex items-center justify-between py-2">
+                <span className="font-hindi text-base font-semibold">{l.name}</span>
+                <span className={`text-sm font-semibold tabular ${l.level === 'low' ? 'text-red-700' : 'text-orange-800'}`}>
                   {l.quantity} {l.unit} bacha
-                </Chip>
+                </span>
               </li>
             ))}
           </ul>
@@ -41,7 +41,7 @@ export default function PaidView({ data, onNew }) {
             href={toPath(receipt)}
             target="_blank"
             rel="noreferrer"
-            className="min-h-[48px] inline-flex items-center justify-center gap-2 rounded-xl border border-line font-semibold"
+            className="min-h-[48px] inline-flex items-center justify-center gap-2 rounded-xl bg-bg-app font-semibold"
           >
             <ExternalLink size={18} /> Receipt dekhein
           </a>

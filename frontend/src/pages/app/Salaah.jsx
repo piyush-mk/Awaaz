@@ -1,27 +1,26 @@
 import { useState } from 'react'
-import { SectionTitle, Tabs } from '../../components/app/ui'
+import { Tabs } from '../../components/app/ui'
 import BriefCard from '../../components/app/salaah/BriefCard'
 import ReorderCards from '../../components/app/salaah/ReorderCards'
-import MunimAsk from '../../components/app/salaah/MunimAsk'
+import AskTab from '../../components/app/salaah/AskTab'
 import WaOrders from '../../components/app/salaah/WaOrders'
 
 const TABS = [
-  { id: 'brief', hi: 'सुबह की सलाह', en: 'Brief' },
-  { id: 'reorder', hi: 'ऑर्डर', en: 'Reorder' },
-  { id: 'munim', hi: 'मुनीम से पूछो', en: 'Ask' },
-  { id: 'orders', hi: 'WhatsApp ऑर्डर', en: 'Orders' },
+  { id: 'brief', label: 'Aaj' },
+  { id: 'reorder', label: 'Order' },
+  { id: 'ask', label: 'Puchhein' },
+  { id: 'orders', label: 'WhatsApp' },
 ]
 
 export default function Salaah() {
   const [tab, setTab] = useState('brief')
   return (
-    <div className="px-4 pt-3 pb-6">
-      <SectionTitle hi="सलाह" en="Salaah: munim ki raay" />
+    <div className="px-4 pb-16">
       <Tabs items={TABS} value={tab} onChange={setTab} />
-      <div className="mt-2">
+      <div className="mt-4">
         {tab === 'brief' && <BriefCard />}
         {tab === 'reorder' && <ReorderCards />}
-        {tab === 'munim' && <MunimAsk />}
+        {tab === 'ask' && <AskTab />}
         {tab === 'orders' && <WaOrders />}
       </div>
     </div>

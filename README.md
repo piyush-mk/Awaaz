@@ -1,10 +1,10 @@
-# Awaaz: the AI munim for every Paytm merchant
+# Awaaz: voice and camera AI for every Paytm merchant
 
 > Bolo. Dikhao. Ho gaya. (Speak. Show. Done.)
 
 Paytm Build for India AI Hackathon, Delhi. Track 1: Merchant Growth AI. Team PinkFloyd.
 
-India's kirana stores run on three things no app has digitised well: speech, paper and trust. Orders are spoken across the counter, stock arrives on distributor bills, and credit lives in a notebook. Awaaz is an AI munim, the shop manager who kept the khata, ran the counter and advised the owner, built to work on the Paytm Soundbox and the Paytm for Business app. The merchant speaks or points a phone camera, and the shop's whole day is recorded without typing.
+India's kirana stores run on three things no app has digitised well: speech, paper and trust. Orders are spoken across the counter, stock arrives on distributor bills, and credit lives in a notebook. Awaaz keeps the khata, runs the counter and advises the owner, built to work on the Paytm Soundbox and the Paytm for Business app. The merchant speaks or points a phone camera, and the shop's whole day is recorded without typing.
 
 Paytm already knows how much every kirana earns. Awaaz records what they sell, what they are owed and what to do next.
 
@@ -36,7 +36,7 @@ If a page shows stale numbers, press **Reset demo data** on `/status` (the demo 
 | **Godown** (गोदाम) | Distributor bill photo to stock with a price guard (Surf Rs3 costlier) and a scheme guard (free packet not counted), expiry alerts and return-claim amounts, shelf photo audit, voice stock-in, missed-sale tracking |
 | **Khata** (खाता) | Udhaar by voice with an instant WhatsApp confirmation to the customer, credit limits from payment history, khata notebook photo import, salary-day reminders, simulated Paytm Postpaid offer at the counter, customer passbook page |
 | **Hisaab** (हिसाब) | Today's sales, payment split, hourly and 14-day charts, margin, invoices with public receipt pages, galla (cash) photo count checked against the day's bills |
-| **Salaah** (सलाह) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask your munim" by voice, WhatsApp voice-note and photo orders from customers |
+| **Salaah** (सलाह, from the header) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask about the shop" by voice, WhatsApp voice-note and photo orders from customers |
 
 Every AI result carries a small `source / latency` chip so it is always clear what is live and what is demo data. Money and stock never change without the merchant's confirmation ("haan" or a tap).
 

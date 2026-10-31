@@ -124,7 +124,7 @@ def create_order(db: Session, customer: Optional[Customer], phone: str, lines: l
     db.add(action)
     db.flush()
     reply = wa.notify(db, phone, text, customer_id=customer.id if customer else None)
-    events.publish("store", "wa_order", {
+    events.publish_after_commit(db, "store", "wa_order", {
         "action_id": action.id, "customer_id": customer.id if customer else None,
         "customer": action.payload["customer"], "phone": phone, "total": total,
         "lines": [{"name": l["name"], "qty": l["qty"], "unit": l.get("unit"), "line_total": l["line_total"]}
@@ -210,7 +210,7 @@ async def process(db: Session, inb: Inbound) -> dict[str, Any]:
         customer_id=customer.id if customer else None, supplier_id=supplier.id if supplier else None)
     db.add(message)
     db.flush()
-    events.publish("wa", "wa_message", _msg_event(message))
+    events.publish_after_commit(db, "wa", "wa_message", _msg_event(message))
     result["message_id"] = message.id
     result["input_type"] = inb.type
 
@@ -261,7 +261,7 @@ def _handle_khata_reply(db: Session, customer: Customer, entry: Any, verdict: st
         khata.set_confirmation(db, entry, False, note=f"customer said: {body[:80]}")
         reply = wa.notify(db, phone, f"Theek hai {customer.name}, humne note kar liya. "
                           f"{settings.merchant_name} aapse jaldi baat karenge.", customer_id=customer.id)
-        events.publish("store", "khata_disputed", {
+        events.publish_after_commit(db, "store", "khata_disputed", {
             "entry_id": entry.id, "customer_id": customer.id, "customer": customer.name,
             "amount": entry.amount, "balance": bal, "text": body,
             "message": f"{customer.name} ne ₹{khata.fmt_inr(abs(entry.amount))} ki entry ko galat bataya."})
@@ -269,7 +269,7 @@ def _handle_khata_reply(db: Session, customer: Customer, entry: Any, verdict: st
     else:
         khata.set_confirmation(db, entry, True)
         reply = wa.notify(db, phone, "Dhanyavaad! Entry confirm ho gayi.", customer_id=customer.id)
-        events.publish("store", "khata_confirmed", {
+        events.publish_after_commit(db, "store", "khata_confirmed", {
             "entry_id": entry.id, "customer_id": customer.id, "customer": customer.name,
             "amount": entry.amount, "balance": bal})
         result.update(routed="khata_confirm", entry_id=entry.id, reply_message_id=reply.id)

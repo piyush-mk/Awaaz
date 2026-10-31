@@ -51,6 +51,16 @@ def balance(db: Session, customer_id: int) -> float:
     return round(float(total or 0.0), 2)
 
 
+def _announce(db: Session, entry: KhataEntry) -> None:
+    """Tell open screens the ledger moved (voice udhaar and khata bills come through here)."""
+    customer = db.get(Customer, entry.customer_id)
+    events.publish_after_commit(db, "store", "khata_updated", {
+        "customer_id": entry.customer_id, "customer": customer.name if customer else None, "entry_id": entry.id,
+        "amount": entry.amount, "kind": "credit" if entry.amount > 0 else "payment",
+        "balance": balance(db, entry.customer_id),
+    })
+
+
 def add_credit(
     db: Session,
     customer_id: int,
@@ -62,6 +72,7 @@ def add_credit(
     entry = KhataEntry(customer_id=customer_id, amount=abs(float(amount)), invoice_id=invoice_id, note=note)
     db.add(entry)
     db.flush()
+    _announce(db, entry)
     return entry
 
 
@@ -76,6 +87,7 @@ def record_payment(
     entry = KhataEntry(customer_id=customer_id, amount=-abs(float(amount)), invoice_id=invoice_id, note=note)
     db.add(entry)
     db.flush()
+    _announce(db, entry)
     return entry
 
 
@@ -386,7 +398,7 @@ def _post_entry(db: Session, customer: Customer, signed: float, note: Optional[s
         entry.wa_status = "queued" if will_send_real else "sent"
         if will_send_real:
             wa.link_khata_entry(msg.id, entry.id)
-    events.publish("store", "khata_updated", {
+    events.publish_after_commit(db, "store", "khata_updated", {
         "customer_id": customer.id, "customer": customer.name, "entry_id": entry.id,
         "amount": signed, "kind": "credit" if signed > 0 else "payment",
         "balance": after, "balance_before": before, "warning": warning,

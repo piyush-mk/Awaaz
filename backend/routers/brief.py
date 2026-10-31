@@ -127,6 +127,7 @@ def reorder_send(order_id: int, body: Optional[ReorderSendIn] = None, db: Sessio
 # ---------------------------------------------------------------------------
 
 
+@router.get("/ask/examples")
 @router.get("/munim/examples")
 def munim_examples():
     return {"examples": munim.EXAMPLE_QUESTIONS}

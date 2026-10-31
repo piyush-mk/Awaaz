@@ -352,7 +352,7 @@ def _resolve_order(db: Session, action: PendingAction, new_status: str, text: st
     action.result = {"status": new_status}
     p = action.payload or {}
     wa.notify(db, p.get("phone"), text, customer_id=p.get("customer_id"))
-    events.publish("store", "wa_order_updated", {"action_id": action.id, "status": new_status,
+    events.publish_after_commit(db, "store", "wa_order_updated", {"action_id": action.id, "status": new_status,
                                                  "customer_id": p.get("customer_id"),
                                                  "customer": p.get("customer"), "total": p.get("total")})
     db.commit()

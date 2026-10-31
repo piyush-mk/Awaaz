@@ -22,7 +22,7 @@ function FlagRow({ flag }) {
   const f = FLAG[flag.code] || { icon: AlertTriangle, tone: 'bg-bg-app border-line text-ink', label: flag.code }
   const Icon = f.icon
   return (
-    <div className={`flex items-start gap-2 rounded-xl border px-3 py-2 ${f.tone}`}>
+    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 ${f.tone}`}>
       <Icon size={18} className="flex-shrink-0 mt-0.5" />
       <div className="text-sm font-medium leading-snug">{flag.message}</div>
     </div>
@@ -96,12 +96,12 @@ export default function BillScanTab() {
     return (
       <Card className="text-center">
         <div className="font-hindi text-2xl font-bold">Stock jud gaya</div>
-        <div className="text-ink-3">{done.supplier} . {done.bill_no} . {inr(done.total)}</div>
+        <div className="text-ink-3">{done.supplier}, {done.bill_no}, {inr(done.total)}</div>
         <ul className="mt-3 text-left space-y-1">
           {done.stock_updates.map((u) => (
             <li key={u.product_id} className="flex justify-between text-sm">
               <span className="font-semibold">{u.name}</span>
-              <span className="tabular text-ink-3">{num(u.old_stock)} {'->'} <b className="text-ink">{num(u.new_stock)}</b> (+{num(u.added)})</span>
+              <span className="tabular text-ink-3">{num(u.old_stock)} se <b className="text-ink">{num(u.new_stock)}</b> (+{num(u.added)})</span>
             </li>
           ))}
         </ul>
@@ -129,7 +129,7 @@ export default function BillScanTab() {
         <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
             <div className="font-hindi text-xl font-bold truncate">{bill.supplier?.name}</div>
-            <div className="text-sm text-ink-3 font-mono">{bill.bill_no} . {bill.bill_date}</div>
+            <div className="text-sm text-ink-3">{bill.bill_no}, {bill.bill_date}</div>
           </div>
           <SourceChip source={bill.source} latency={bill.latency_ms} demo={bill.demo_mode} />
         </div>
@@ -139,7 +139,7 @@ export default function BillScanTab() {
         </div>
         {bill.duplicate?.is_duplicate && <Chip tone="red" className="mt-2">Yeh bill pehle darj ho chuka hai</Chip>}
         {bill.message_hi && (
-          <button onClick={() => speak({ spoken_text: bill.message_hi })} className="mt-3 w-full text-left rounded-xl bg-bg-app p-3 flex gap-2">
+          <button onClick={() => speak({ spoken_text: bill.message_hi })} className="mt-3 w-full text-left rounded-xl bg-white p-3 flex gap-2">
             <Volume2 size={18} className="flex-shrink-0 mt-1 text-paytm-blue" />
             <span className="font-hindi text-base">{bill.message_hi}</span>
           </button>
@@ -160,11 +160,11 @@ export default function BillScanTab() {
           const q = qty[l.index] ?? l.qty
           const hot = l.flags?.some((f) => f.severity === 'warn')
           return (
-            <li key={l.index} className={`rounded-2xl border p-3 ${skipped ? 'opacity-40' : ''} ${hot ? 'border-orange-300 bg-orange-50/40' : 'border-line bg-white'}`}>
+            <li key={l.index} className={`rounded-2xl p-3 ${skipped ? 'opacity-40' : ''} ${hot ? 'bg-orange-50' : 'bg-bg-app'}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-hindi text-base font-bold leading-tight">{l.product_name || l.name_raw}</div>
-                  <div className="text-xs text-ink-3 truncate">{l.name_raw} . batch {l.batch || '-'} . exp {l.expiry || '-'}</div>
+                  <div className="text-xs text-ink-3 truncate">{l.name_raw}, batch {l.batch || '-'}, exp {l.expiry || '-'}</div>
                 </div>
                 <div className="text-right flex-shrink-0 tabular">
                   <div className="font-bold">{inr(q * l.rate)}</div>

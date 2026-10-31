@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Ear, Keyboard, Receipt, ScanLine, Send, UserRound, Sparkles } from 'lucide-react'
+import { Ear, Keyboard, ScanLine, UserRound, Sparkles } from 'lucide-react'
 import { useApp, useStoreEvent } from '../../components/app/AppContext'
-import MicOrb from '../../components/app/MicOrb'
+import { useVoice, useVoiceHandler } from '../../components/app/VoiceContext'
 import PhotoButton from '../../components/app/PhotoButton'
 import CartPanel from '../../components/app/CartPanel'
 import ActionCard from '../../components/app/ActionCard'
@@ -10,8 +10,7 @@ import PaySheet from '../../components/app/PaySheet'
 import PayQR from '../../components/app/PayQR'
 import PaidView from '../../components/app/PaidView'
 import SourceChip from '../../components/app/SourceChip'
-import { Btn, Chip, inputCls } from '../../components/app/ui'
-import useRecorder from '../../hooks/useRecorder'
+import { Btn } from '../../components/app/ui'
 import { speak, stopSpeaking } from '../../lib/audio'
 import { inr } from '../../lib/format'
 import {
@@ -30,10 +29,9 @@ import {
   addMissedSale,
 } from '../../api/client'
 
-const EXAMPLES = ['do maggi ek surf excel chaar colgate', 'bees rupaye ki cheeni', 'bas kitna hua']
-
 export default function Counter() {
   const { sessionId, showToast, showError } = useApp()
+  const { rec, busy, room, submit: voiceSubmit, openType } = useVoice()
 
   const [cart, setCart] = useState(null)
   const [stage, setStage] = useState('cart') // cart | pay | paid
@@ -41,9 +39,6 @@ export default function Counter() {
   const [paid, setPaid] = useState(null)
   const [pending, setPending] = useState([])
   const [last, setLast] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [text, setText] = useState('')
-  const [showText, setShowText] = useState(false)
   const [customerOpen, setCustomerOpen] = useState(false)
   const [payOpen, setPayOpen] = useState(false)
   const [paying, setPaying] = useState(false)
@@ -56,8 +51,8 @@ export default function Counter() {
   const checkoutRef = useRef(null)
   checkoutRef.current = checkout
   const paidOrders = useRef(new Set())
-  const queue = useRef(Promise.resolve())
-  const recRef = useRef(null)
+  const recRef = useRef(rec)
+  recRef.current = rec
 
   // ----- cart state ---------------------------------------------------------------------------------------
 
@@ -88,9 +83,9 @@ export default function Counter() {
   const showCheckout = useCallback(
     (data) => {
       if (!data || !data.order_id) return
+      setPayOpen(false) // before the guard: payment_received can arrive ahead of the checkout reply
       if (paidOrders.current.has(data.order_id)) return
       setCheckout(data)
-      setPayOpen(false)
       if (data.complete) {
         paidOrders.current.add(data.order_id)
         setPaid({ ...data, amount: data.total })
@@ -108,6 +103,7 @@ export default function Counter() {
       const orderId = data.order_id
       if (orderId && paidOrders.current.has(orderId)) return
       if (orderId) paidOrders.current.add(orderId)
+      setPayOpen(false)
       setPaid({ ...data, amount: data.amount ?? data.invoice?.total, receipt_url: data.receipt_url || data.invoice?.receipt_url })
       setStage('paid')
       say(data)
@@ -172,6 +168,20 @@ export default function Counter() {
     const mine = d.session_id === sessionId || (checkoutRef.current && d.order_id === checkoutRef.current.order_id)
     if (mine) onPaid(d)
   })
+  useStoreEvent('action_resolved', (d) => {
+    setPending((cur) => cur.filter((a) => a.id !== d.id))
+  })
+  useStoreEvent('demo_reset', () => {
+    stageRef.current = 'cart'
+    setStage('cart')
+    setCheckout(null)
+    setPaid(null)
+    setUsual(null)
+    setParchi(null)
+    setPending([])
+    setLast(null)
+    refreshCart()
+  })
   useStoreEvent('action_proposed', (d) => {
     if (d.session_id !== sessionId || !d.action || d.action.kind === 'cart_edit') return
     setPending((cur) => (cur.some((a) => a.id === d.action.id) ? cur : [...cur, d.action]))
@@ -197,55 +207,31 @@ export default function Counter() {
     [showCheckout, showToast],
   )
 
-  const submit = useCallback(
-    async ({ audio, filename, text: typed }) => {
-      setBusy(true)
-      try {
-        const res = await sendUtterance({ audio, filename, text: typed, context: 'counter', sessionId })
-        setLast(res)
-        if (res.cart) applyCart(res.cart)
-        else refreshCart()
-        processActions(res.actions)
-        if (res.missed?.length) showToast(`${res.missed.join(', ')} note kiya`, 'warning')
-        if (!res.actions?.some((a) => a.status === 'confirmed' && a.result?.order_id)) say(res)
-      } catch (e) {
-        showError(e)
-      } finally {
-        setBusy(false)
-      }
-    },
-    [applyCart, processActions, refreshCart, say, sessionId, showError, showToast],
-  )
-
-  const enqueue = useCallback(
-    (job) => {
-      queue.current = queue.current.then(() => submit(job)).catch(() => {})
-    },
-    [submit],
-  )
-
-  const rec = useRecorder({
-    onAudio: (blob, meta) => enqueue({ audio: blob, filename: meta.filename }),
+  useVoiceHandler(async ({ audio, filename, text: typed }) => {
+    const res = await sendUtterance({ audio, filename, text: typed, context: 'counter', sessionId })
+    setLast(res)
+    if (res.cart) applyCart(res.cart)
+    else refreshCart()
+    processActions(res.actions)
+    if (res.missed?.length) showToast(`${res.missed.join(', ')} note kiya`, 'warning')
+    if (!res.actions?.some((a) => a.status === 'confirmed' && a.result?.order_id)) say(res)
   })
-  recRef.current = rec
 
   // Stop listening when this screen closes or a bill is being paid.
   useEffect(() => {
     if (stage !== 'cart' && rec.handsFree) rec.stopHandsFree()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage])
+  useEffect(
+    () => () => {
+      recRef.current?.stopHandsFree()
+    },
+    [],
+  )
 
   const toggleHandsFree = async () => {
     if (rec.handsFree) await rec.stopHandsFree()
     else if (!(await rec.startHandsFree())) showToast('Microphone chalu nahi hua', 'error')
-  }
-
-  const sendText = (e, phrase) => {
-    e?.preventDefault?.()
-    const t = (phrase ?? text).trim()
-    if (!t) return
-    setText('')
-    enqueue({ text: t })
   }
 
   // ----- cart edits ---------------------------------------------------------------------------------------
@@ -327,86 +313,73 @@ export default function Counter() {
   const lines = cart?.lines || []
   const isEmpty = lines.length === 0
   const customer = cart?.customer
+  const status = rec.handsFree ? (rec.phase === 'speech' ? 'Sun liya, ruk kar bhejunga' : 'Sun raha hai') : 'Sun raha hai'
 
   return (
-    <div className="relative min-h-full flex flex-col">
-      <div className="px-4 pt-3 space-y-3 flex-1">
-        {/* customer + hands-free */}
+    <div className="relative min-h-full flex flex-col bg-bg-app">
+      <div className="px-4 pt-3 pb-8 space-y-3 flex-1">
         {stage === 'cart' && (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCustomerOpen(true)}
-              className="flex-1 min-h-[48px] min-w-0 bg-white rounded-xl border border-line px-3 flex items-center gap-2 text-left"
-            >
-              <UserRound size={18} className="text-ink-3 flex-shrink-0" />
-              <span className="font-hindi text-base font-bold truncate">{customer ? customer.name : 'Customer'}</span>
-              {customer?.balance > 0 && <Chip tone="yellow" className="ml-auto">baaki {inr(customer.balance)}</Chip>}
+            <button onClick={() => setCustomerOpen(true)} className="flex-1 min-h-[44px] min-w-0 bg-white rounded-xl px-3 flex items-center gap-2 text-left">
+              {customer && <UserRound size={18} className="text-ink-3 flex-shrink-0" />}
+              <span className="text-sm font-semibold truncate">{customer ? customer.name : 'Customer'}</span>
+              {customer?.balance > 0 && <span className="ml-auto text-xs font-medium text-orange-800 whitespace-nowrap">baaki {inr(customer.balance)}</span>}
             </button>
             <button
               onClick={toggleHandsFree}
               disabled={!rec.supported}
               aria-pressed={rec.handsFree}
-              className={`min-h-[48px] px-3 rounded-xl border flex items-center gap-2 font-semibold ${
-                rec.handsFree ? 'bg-ink text-white border-ink' : 'bg-white text-ink border-line'
-              } disabled:opacity-40`}
+              aria-label="Sun raha hai"
+              className={`min-h-[44px] px-3 rounded-xl flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap disabled:opacity-40 ${rec.handsFree ? 'bg-ink text-white' : 'bg-white text-ink'}`}
             >
               <Ear size={18} className={rec.handsFree ? 'text-paytm-blue' : ''} />
-              <span className="font-hindi text-sm font-bold whitespace-nowrap">Sun raha hai</span>
-              <span className={`w-9 h-5 rounded-full relative transition-colors ${rec.handsFree ? 'bg-stock-green' : 'bg-line'}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${rec.handsFree ? 'left-[18px]' : 'left-0.5'}`} />
-              </span>
+              {rec.handsFree ? status : 'Sun raha hai'}
+            </button>
+            <PhotoButton compact icon={ScanLine} variant="outline" busy={parchiBusy} label="Parchi" onFiles={doParchi} className="!h-11 !w-11 !border-0 flex-shrink-0" />
+            <button onClick={openType} aria-label="Type karein" className="w-11 h-11 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
+              <Keyboard size={20} />
             </button>
           </div>
         )}
 
         {usual && stage === 'cart' && (
-          <div className="bg-white rounded-2xl border-2 border-accent p-3 flex items-center gap-3">
+          <div className="bg-white rounded-2xl p-3 flex items-center gap-3">
             <Sparkles size={22} className="text-accent flex-shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="font-hindi text-lg font-bold truncate">{usual.prompt || `${usual.customer?.name} ka usual?`}</div>
-              <div className="text-sm text-ink-3 truncate">
-                {usual.lines.map((l) => l.name).join(', ')} . {inr(usual.total)}
-              </div>
+              <div className="font-hindi text-lg font-semibold truncate">{usual.prompt || `${usual.customer?.name} ka usual?`}</div>
+              <div className="text-sm text-ink-3 truncate">{usual.lines.map((l) => l.name).join(', ')}, {inr(usual.total)}</div>
             </div>
-            <Btn size="sm" variant="accent" onClick={addUsual}>
-              Haan
-            </Btn>
+            <Btn size="sm" variant="navy" onClick={addUsual}>Haan</Btn>
           </div>
         )}
 
-        {/* last utterance */}
         {last && stage === 'cart' && (
-          <div className="bg-white rounded-2xl border border-line p-3">
+          <div className="bg-sky-100 rounded-2xl rounded-bl p-3">
             <div className="flex items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Aapne kaha</div>
-                <div className="font-hindi text-lg font-bold text-ink leading-snug">&ldquo;{last.transcript}&rdquo;</div>
+                <div className="text-xs font-semibold text-sky-800">Aapne kaha</div>
+                <div className="font-hindi text-lg italic text-ink leading-snug">&ldquo;{last.transcript}&rdquo;</div>
               </div>
               <SourceChip source={last.source} latency={last.latency_ms} demo={last.demo_mode && last.source === 'fixture'} />
             </div>
-            {last.spoken_text && <p className="mt-1 font-hindi text-base text-ink-3">{last.spoken_text}</p>}
-            {last.errors?.length > 0 && <p className="mt-1 text-sm text-stock-red">{last.errors.join('; ')}</p>}
+            {last.spoken_text && <p className="mt-1 font-hindi text-base text-ink">{last.spoken_text}</p>}
+            {last.errors?.length > 0 && <p className="mt-1 text-sm text-red-700">{last.errors.join('; ')}</p>}
           </div>
         )}
 
-        {/* parchi result */}
         {parchi && stage === 'cart' && (
-          <div className="bg-white rounded-2xl border border-line p-3">
+          <div className="bg-white rounded-2xl p-3">
             <div className="flex items-start gap-2">
               <div className="flex-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Parchi padh li</div>
-                <p className="font-hindi text-base font-bold">{parchi.message_hi}</p>
+                <div className="text-xs font-semibold text-ink-3">Parchi padh li</div>
+                <p className="font-hindi text-base font-semibold">{parchi.message_hi}</p>
               </div>
               <SourceChip source={parchi.source} latency={parchi.latency_ms} demo={parchi.demo_mode} />
             </div>
             {parchi.unmatched?.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {parchi.unmatched.map((u) => (
-                  <button
-                    key={u.name}
-                    onClick={() => noteMissed(u.name)}
-                    className="min-h-[44px] px-3 rounded-full bg-orange-50 border border-orange-200 text-sm font-semibold text-orange-900"
-                  >
+                  <button key={u.name} onClick={() => noteMissed(u.name)} className="min-h-[44px] px-3 rounded-full bg-orange-50 text-sm font-semibold text-orange-900">
                     {u.name} nahi hai: note karein
                   </button>
                 ))}
@@ -415,7 +388,6 @@ export default function Counter() {
           </div>
         )}
 
-        {/* proposals */}
         {pending.map((a) => (
           <ActionCard
             key={a.id}
@@ -438,106 +410,39 @@ export default function Counter() {
         {stage === 'cart' && (
           <>
             <CartPanel cart={cart} onQty={changeQty} onRemove={removeLine} disabled={busy} />
-            {isEmpty && (
-              <div className="pt-6 pb-2 text-center">
-                <div className="font-hindi text-3xl font-bold text-ink leading-tight">Boliye, kya dena hai?</div>
-                <div className="mt-1 text-sm text-ink-3">Mic dabayein aur bolein, ya &ldquo;Sun raha hai&rdquo; chalu karein</div>
-                <div className="mt-5 flex flex-col items-stretch gap-2">
-                  {EXAMPLES.map((ex) => (
-                    <button
-                      key={ex}
-                      onClick={() => sendText(null, ex)}
-                      className="min-h-[48px] rounded-xl bg-white border border-line px-4 text-left font-hindi text-base text-ink-3 active:bg-bg-app"
-                    >
-                      &ldquo;{ex}&rdquo;
-                    </button>
+            {isEmpty && !last && !pending.length && (
+              <div className="pt-10 text-center">
+                <div className="font-hindi text-3xl font-semibold text-ink leading-tight">Boliye, kya dena hai?</div>
+                <div className="mt-2 text-[15px] text-ink-3">Neeche mic dabayein aur bolein</div>
+                <ul className="mt-6 divide-y divide-line text-left">
+                  {room.examples.map((ex) => (
+                    <li key={ex}>
+                      <button onClick={() => voiceSubmit({ text: ex })} className="w-full min-h-[48px] font-hindi text-base italic text-ink-3 text-left">
+                        &ldquo;{ex}&rdquo;
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
           </>
         )}
 
-        {stage === 'pay' && checkout && (
-          <PayQR checkout={checkout} onPaid={onPaid} onBack={newBill} />
-        )}
+        {stage === 'pay' && checkout && <PayQR checkout={checkout} onPaid={onPaid} onBack={newBill} />}
         {stage === 'paid' && paid && <PaidView data={paid} onNew={newBill} />}
       </div>
 
-      {/* dock */}
-      {stage === 'cart' && (
-        <div className="sticky bottom-0 z-10 px-4 pt-3 pb-3 bg-bg-app border-t border-line shadow-[0_-6px_16px_rgba(14,27,51,0.06)]">
-          {!isEmpty && (
-            <Btn size="lg" variant="navy" icon={Receipt} className="w-full mb-3" onClick={() => setPayOpen(true)}>
-              Bill banao . {inr(cart.total)}
-            </Btn>
-          )}
-          <div className="flex items-center justify-between">
-            <div className="w-16 flex flex-col items-center gap-1">
-              <PhotoButton compact icon={ScanLine} variant="outline" busy={parchiBusy} label="Parchi" onFiles={doParchi} />
-              <span className="text-[11px] text-ink-3">Parchi</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              <MicOrb rec={rec} busy={busy && !rec.handsFree} />
-              <span className="text-xs font-medium text-ink-3 h-4">
-                {rec.error ||
-                  (busy
-                    ? 'Samajh raha hoon...'
-                    : rec.handsFree
-                      ? rec.phase === 'speech'
-                        ? 'Sun liya, ruk kar bhejunga...'
-                        : 'Sun raha hoon...'
-                      : rec.recording
-                        ? 'Chhodein ya dobara tap karein'
-                        : rec.supported
-                          ? 'Dabayein aur bolein'
-                          : 'Mic nahi hai, type karein')}
-              </span>
-            </div>
-            <div className="w-16 flex flex-col items-center gap-1">
-              <button
-                onClick={() => setShowText((v) => !v)}
-                aria-label="Type karein"
-                className={`w-12 h-12 rounded-xl border flex items-center justify-center ${
-                  showText ? 'bg-ink text-white border-ink' : 'bg-white border-line'
-                }`}
-              >
-                <Keyboard size={20} />
-              </button>
-              <span className="text-[11px] text-ink-3">Type</span>
-            </div>
-          </div>
-          {showText && (
-            <form onSubmit={sendText} className="mt-3 flex gap-2">
-              <input
-                className={inputCls}
-                placeholder="ya type karein: do maggi, ek surf"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                autoFocus
-              />
-              <button
-                type="submit"
-                disabled={!text.trim() || busy}
-                aria-label="Bhejein"
-                className="w-12 h-12 flex-shrink-0 rounded-xl bg-paytm-blue text-ink flex items-center justify-center disabled:opacity-50"
-              >
-                <Send size={20} />
-              </button>
-            </form>
-          )}
+      {stage === 'cart' && !isEmpty && (
+        <div className="sticky bottom-0 z-10 px-4 pt-3 pb-11 bg-bg-app">
+          <button onClick={() => setPayOpen(true)} className="w-full min-h-[56px] rounded-xl bg-ink text-white px-5 flex items-center justify-between text-lg font-semibold active:bg-ink-2">
+            <span>Bill banao</span>
+            <span className="tabular">{inr(cart.total)}</span>
+          </button>
         </div>
       )}
 
       <CustomerSheet open={customerOpen} onClose={() => setCustomerOpen(false)} onPick={pickCustomer} />
-      <PaySheet
-        open={payOpen}
-        onClose={() => setPayOpen(false)}
-        total={cart?.total || 0}
-        customer={customer}
-        busy={paying}
-        onConfirm={doCheckout}
-      />
+      <PaySheet open={payOpen} onClose={() => setPayOpen(false)} total={cart?.total || 0} customer={customer} busy={paying} onConfirm={doCheckout} />
     </div>
   )
 }

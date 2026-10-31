@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Card, ErrorBox, SectionTitle, SkeletonList, Tabs } from '../../components/app/ui'
+import { ErrorBox, Hero, Rows, SkeletonList, Tabs } from '../../components/app/ui'
+import { VoiceHint } from '../../components/app/VoiceContext'
 import { HourlyChart, SeriesChart } from '../../components/app/hisaab/Charts'
 import Galla from '../../components/app/hisaab/Galla'
 import Invoices from '../../components/app/hisaab/Invoices'
@@ -9,9 +10,9 @@ import { getDashboardV2 } from '../../api/client'
 import { inr, num } from '../../lib/format'
 
 const TABS = [
-  { id: 'today', hi: 'आज', en: 'Today' },
-  { id: 'bills', hi: 'बिल', en: 'Invoices' },
-  { id: 'galla', hi: 'गल्ला', en: 'Cash close' },
+  { id: 'today', label: 'Aaj' },
+  { id: 'bills', label: 'Bill' },
+  { id: 'galla', label: 'Galla' },
 ]
 
 const SPLIT = [
@@ -22,19 +23,26 @@ const SPLIT = [
   { key: 'card', label: 'Card', color: '#B8C2D0' },
 ]
 
-function Tile({ label, value, sub, tone }) {
+function Line({ label, value, sub }) {
   return (
-    <Card className="!p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">{label}</div>
-      <div className="text-2xl font-bold tabular leading-tight">{value}</div>
-      {sub && <div className={`text-xs mt-0.5 ${tone || 'text-ink-3'}`}>{sub}</div>}
-    </Card>
+    <li className="flex items-center justify-between gap-3 px-4 py-3">
+      <div className="min-w-0">
+        <div className="text-base truncate">{label}</div>
+        {sub && <div className="text-sm text-ink-3 truncate">{sub}</div>}
+      </div>
+      <div className="font-semibold tabular flex-shrink-0">{value}</div>
+    </li>
   )
 }
 
 function Today() {
   const { data: d, loading, error, reload } = useLoad(() => getDashboardV2(), [])
-  useStoreEvent('payment_received', () => reload({ quiet: true }))
+  const refresh = () => reload({ quiet: true })
+  useStoreEvent('payment_received', refresh)
+  useStoreEvent('checkout', refresh)
+  useStoreEvent('khata_updated', refresh)
+  useStoreEvent('stock_updated', refresh)
+  useStoreEvent('demo_reset', refresh)
   if (loading && !d) return <SkeletonList rows={4} className="h-28" />
   if (error) return <ErrorBox error={error} onRetry={reload} />
   if (!d) return null
@@ -43,68 +51,47 @@ function Today() {
   const split = SPLIT.map((s) => ({ ...s, amount: d.payment_split[s.key] || 0, pct: d.payment_split_pct[s.key] || 0 })).filter((s) => s.amount > 0)
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <Tile label="Aaj ki sale" value={inr(d.today.sales)} sub={`${d.today.invoices} bill`} />
-        <Tile label="Avg bill" value={inr(d.today.avg_bill, 0)} sub={`kal ${inr(d.yesterday.sales)}`} />
-        <Tile label="Margin" value={inr(d.margin.margin, 0)} sub={`${num(d.margin.margin_pct, 1)}% of sale`} tone="text-green-700" />
-        <Tile
-          label="Kal vs pichla hafta"
-          value={`${delta > 0 ? '+' : ''}${num(delta, 0)}%`}
-          sub={delta >= 0 ? 'zyada' : 'kam'}
-          tone={delta >= 0 ? 'text-green-700' : 'text-stock-red'}
-        />
-      </div>
+    <div className="space-y-5">
+      <Hero value={inr(d.today.sales)} sub={`${d.today.invoices} bill, avg ${inr(d.today.avg_bill, 0)}, margin ${inr(d.margin.margin, 0)}`} />
 
-      <Card>
-        <div className="font-hindi text-lg font-bold mb-2">Paisa kaise aaya</div>
-        <div className="flex h-5 rounded-full overflow-hidden bg-bg-app">
-          {split.map((s) => (
-            <div key={s.key} style={{ width: `${s.pct}%`, background: s.color }} title={`${s.label} ${s.pct}%`} />
-          ))}
-        </div>
-        <ul className="mt-3 space-y-1.5">
-          {split.map((s) => (
-            <li key={s.key} className="flex items-center gap-2 text-sm">
-              <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.color }} />
-              <span className="flex-1">{s.label}</span>
-              <span className="text-ink-3 tabular">{num(s.pct, 0)}%</span>
-              <b className="tabular w-24 text-right">{inr(s.amount)}</b>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      <VoiceHint />
 
-      <Card>
-        <div className="font-hindi text-lg font-bold">Ghante ke hisaab se</div>
-        <div className="text-xs text-ink-3 mb-1">Aaj, ghanta {d.hourly.length ? '7 se 22' : ''}</div>
+      <div>
         <HourlyChart data={d.hourly} />
-      </Card>
-
-      <Card>
-        <div className="font-hindi text-lg font-bold">Pichhle 14 din</div>
-        <div className="text-xs text-ink-3 mb-1">Halka bar: aaj, abhi tak</div>
-        <SeriesChart data={d.series} />
-      </Card>
-
-      <Card>
-        <div className="font-hindi text-lg font-bold mb-2">Aaj sabse zyada bika</div>
-        <ul className="divide-y divide-line">
-          {d.top_items.map((t, i) => (
-            <li key={t.product_id} className="flex items-center gap-3 py-2">
-              <span className="w-6 text-ink-3 tabular text-sm">{i + 1}</span>
-              <span className="flex-1 font-semibold">{t.name}</span>
-              <span className="text-ink-3 text-sm tabular">{num(t.qty)} {t.unit}</span>
-              <b className="tabular w-20 text-right">{inr(t.amount)}</b>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Tile label="Udhaar baaki" value={inr(d.udhaar.total_outstanding)} sub={`${d.udhaar.customers_with_balance} customer . ${d.udhaar.overdue_count} late`} tone="text-orange-700" />
-        <Tile label="Stock value" value={inr(d.total_stock_value)} sub={`${d.low_stock_count} item kam`} tone={d.low_stock_count ? 'text-stock-red' : undefined} />
+        <div className="text-sm text-ink-3 mt-1">
+          Kal {inr(d.yesterday.sales)}, pichhle hafte se {delta >= 0 ? `${num(delta, 0)}% zyada` : `${num(Math.abs(delta), 0)}% kam`}
+        </div>
       </div>
+
+      {split.length > 0 && (
+        <div>
+          <div className="flex h-2 rounded-full overflow-hidden bg-bg-app mb-1">
+            {split.map((s) => (
+              <div key={s.key} style={{ width: `${s.pct}%`, background: s.color }} title={`${s.label} ${s.pct}%`} />
+            ))}
+          </div>
+          <Rows className="!border-t-0">
+            {split.map((s) => <Line key={s.key} label={s.label} value={inr(s.amount)} />)}
+          </Rows>
+        </div>
+      )}
+
+      <div>
+        <div className="font-hindi text-lg font-semibold mb-1">Sabse zyada bika</div>
+        <Rows>
+          {d.top_items.map((t) => <Line key={t.product_id} label={t.name} sub={`${num(t.qty)} ${t.unit}`} value={inr(t.amount)} />)}
+        </Rows>
+      </div>
+
+      <div>
+        <div className="font-hindi text-lg font-semibold mb-1">Pichhle 14 din</div>
+        <SeriesChart data={d.series} />
+      </div>
+
+      <Rows>
+        <Line label="Udhaar baaki" sub={`${d.udhaar.customers_with_balance} customer, ${d.udhaar.overdue_count} late`} value={inr(d.udhaar.total_outstanding)} />
+        <Line label="Stock ki value" sub={`${d.low_stock_count} item kam`} value={inr(d.total_stock_value)} />
+      </Rows>
     </div>
   )
 }
@@ -112,10 +99,9 @@ function Today() {
 export default function Hisaab() {
   const [tab, setTab] = useState('today')
   return (
-    <div className="px-4 pt-3 pb-6">
-      <SectionTitle hi="हिसाब" en="Hisaab: aaj kitna bika" />
+    <div className="px-4 pb-16">
       <Tabs items={TABS} value={tab} onChange={setTab} />
-      <div className="mt-2">
+      <div className="mt-4">
         {tab === 'today' && <Today />}
         {tab === 'bills' && <Invoices />}
         {tab === 'galla' && <Galla />}

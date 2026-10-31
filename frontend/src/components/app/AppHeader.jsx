@@ -1,4 +1,10 @@
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { ExternalLink, Lightbulb, MoreVertical } from 'lucide-react'
 import { useApp } from './AppContext'
+import { Sheet } from './ui'
+
+const TITLES = { godown: 'गोदाम', khata: 'खाता', hisaab: 'हिसाब', salaah: 'सलाह' }
 
 const LINKS = [
   { to: '/soundbox', label: 'Soundbox' },
@@ -8,37 +14,57 @@ const LINKS = [
 
 export default function AppHeader() {
   const { storeName, connected, demo } = useApp()
+  const { pathname } = useLocation()
+  const [menu, setMenu] = useState(false)
+  const room = pathname.split('/')[2]
+  const title = TITLES[room]
+
   return (
-    <header className="bg-ink text-white px-4 pt-[max(env(safe-area-inset-top),14px)] pb-3 flex-shrink-0">
-      <div className="flex items-center gap-2">
+    <header className="bg-white flex-shrink-0 px-4 pt-[max(env(safe-area-inset-top),6px)]">
+      <div className="h-12 flex items-center gap-1">
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-paytm-blue">Awaaz . Paytm for Business</div>
-          <div className="font-hindi text-lg font-bold leading-tight truncate">{storeName}</div>
+          {title ? (
+            <h1 className="font-hindi text-[22px] font-semibold leading-none">{title}</h1>
+          ) : (
+            <h1 className="text-[17px] font-semibold truncate">{storeName}</h1>
+          )}
         </div>
         {demo === 'fixtures' && (
-          <span className="rounded-full bg-accent/20 text-accent text-[11px] font-semibold px-2 py-0.5">demo data</span>
+          <span className="rounded-full bg-orange-100 text-orange-800 text-[11px] font-semibold px-2 py-0.5 flex-shrink-0">demo data</span>
         )}
         <span
-          className="flex items-center gap-1.5 text-[11px] text-white/70"
+          role="status"
+          className="flex items-center gap-1.5 text-xs font-medium text-red-700 px-2 flex-shrink-0"
           title={connected ? 'Live updates connected' : 'Live updates reconnecting'}
         >
-          <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-stock-green' : 'bg-stock-red animate-pulse'}`} />
-          {connected ? 'live' : 'offline'}
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-600' : 'bg-red-600 animate-pulse'}`} />
+          {!connected && 'offline'}
+          <span className="sr-only">{connected ? 'live' : ''}</span>
         </span>
+        <Link
+          to="/app/salaah"
+          aria-label="Salaah"
+          aria-current={room === 'salaah' ? 'page' : undefined}
+          className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${room === 'salaah' ? 'bg-sky-100 text-sky-800' : 'text-ink'}`}
+        >
+          <Lightbulb size={22} />
+        </Link>
+        <button onClick={() => setMenu(true)} aria-label="Aur" className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center flex-shrink-0">
+          <MoreVertical size={22} />
+        </button>
       </div>
-      <div className="mt-2 flex gap-2">
-        {LINKS.map((l) => (
-          <a
-            key={l.to}
-            href={l.to}
-            target="_blank"
-            rel="noreferrer"
-            className="flex-1 min-h-[36px] flex items-center justify-center rounded-lg bg-white/10 text-xs font-semibold text-white active:bg-white/20"
-          >
-            {l.label}
-          </a>
-        ))}
-      </div>
+      <Sheet open={menu} onClose={() => setMenu(false)} title="Doosri screen">
+        <ul className="divide-y divide-line">
+          {LINKS.map((l) => (
+            <li key={l.to}>
+              <a href={l.to} target="_blank" rel="noreferrer" className="min-h-[52px] flex items-center justify-between text-base font-semibold">
+                {l.label}
+                <ExternalLink size={18} className="text-ink-3" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      </Sheet>
     </header>
   )
 }

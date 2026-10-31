@@ -352,7 +352,7 @@ def build_messages(db: Session, cart: CartRow, index: catalog.CatalogIndex, tran
     lines = read_lines(cart)
     cart_txt = "; ".join(f"{ln.name} x{ln.qty:g} {ln.unit}" for ln in lines) or "empty"
     system = (
-        f"You are Awaaz, the munim (clerk) of {settings.merchant_name}, a kirana store. The merchant and "
+        f"You are Awaaz, the AI shop assistant of {settings.merchant_name}, a kirana store. The merchant and "
         f"customers speak Hinglish. Context: {context}. Understand the utterance and call tools; never "
         "invent products that are not in the catalog (use missed_sale for those). Amounts are in rupees. "
         "Loose goods (sell_mode=loose) are priced per kg/litre: 'bees rupaye ki cheeni' means "
@@ -1108,7 +1108,7 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
 
     cart_changed = list(cart.lines or []) != snapshot
     if context == "ask" and not out.spoken:
-        out.spoken.append("Abhi is sawaal ka jawab nahi de sakta. Sarvam key judte hi munim batayega.")
+        out.spoken.append("Abhi is sawaal ka jawab nahi de sakta. Sarvam key judte hi bata paunga.")
     spoken = compose_spoken(db, ctx, out, cart_changed)
     if not spoken:
         spoken = "Samajh nahi aaya, dobara bolein."

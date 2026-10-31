@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ExternalLink, Flag, Check } from 'lucide-react'
-import { Btn, Card, Chip, ErrorBox, SkeletonList } from '../ui'
+import { Btn, ErrorBox, Hero, Rows, SkeletonList } from '../ui'
+import { statusOf } from './KhataList'
 import EntrySheet from './EntrySheet'
 import useLoad from '../../../lib/useLoad'
 import { useApp, useStoreEvent } from '../AppContext'
 import { confirmKhataEntry, disputeKhataEntry, getKhataCustomer } from '../../../api/client'
 import { inr, shortDate, toPath } from '../../../lib/format'
-
-const RISK = { high: 'red', medium: 'yellow', low: 'green' }
 
 export default function KhataDetail() {
   const { id } = useParams()
@@ -23,6 +22,14 @@ export default function KhataDetail() {
       reload({ quiet: true })
     }
   })
+
+  const refresh = (d) => {
+    if (!d?.customer_id || String(d.customer_id) === String(id)) reload({ quiet: true })
+  }
+  useStoreEvent('khata_updated', refresh)
+  useStoreEvent('khata_confirmed', refresh)
+  useStoreEvent('postpaid_approved', refresh)
+  useStoreEvent('demo_reset', refresh)
 
   const mark = async (entry, kind) => {
     try {
@@ -41,27 +48,18 @@ export default function KhataDetail() {
 
   const disputed = c.entries.filter((e) => e.disputed)
   return (
-    <div className="px-4 pt-3 pb-6 space-y-3">
-      <Link to="/app/khata" className="inline-flex items-center gap-1 min-h-[44px] text-sm font-semibold text-ink-3">
+    <div className="px-4 pb-16 space-y-3">
+      <Link to="/app/khata" className="-ml-1 inline-flex items-center gap-1 min-h-[44px] text-sm font-semibold text-ink-3">
         <ChevronLeft size={18} /> Sab customer
       </Link>
 
-      <Card className="!bg-ink text-white border-ink">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="font-hindi text-2xl font-bold">{c.name}</div>
-            <div className="text-xs text-white/60">{c.phone || 'phone nahi hai'}</div>
-          </div>
-          <Chip tone={RISK[c.risk] || 'gray'}>risk {c.risk}</Chip>
-        </div>
-        <div className="mt-3 text-xs text-white/60">Baaki</div>
-        <div className={`text-5xl font-bold tabular ${c.over_limit ? 'text-accent' : ''}`}>{inr(c.balance)}</div>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-          <span className="rounded-full bg-white/10 px-2.5 py-0.5">limit {inr(c.credit_limit)}</span>
-          {c.late_payments > 0 && <span className="rounded-full bg-red-500/30 px-2.5 py-0.5">{c.late_payments} baar late</span>}
-        </div>
-        {c.limit_reason && <p className="mt-3 font-hindi text-base text-white/90">{c.limit_reason}</p>}
-      </Card>
+      <div>
+        <div className="font-hindi text-2xl font-semibold">{c.name}</div>
+        <div className="text-sm text-ink-3 mb-3">{c.phone || 'phone nahi hai'}</div>
+        <Hero value={inr(c.balance)} sub={c.balance > c.credit_limit ? null : `Limit ${inr(c.credit_limit)}`} />
+        <div className={`mt-1 text-[15px] ${statusOf(c).cls}`}>{statusOf(c).text}</div>
+        {c.limit_reason && <p className="mt-2 font-hindi text-base text-ink">{c.limit_reason}</p>}
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Btn variant="accent" icon={ArrowUpRight} onClick={() => setSheet('credit')}>Udhaar diya</Btn>
@@ -69,7 +67,7 @@ export default function KhataDetail() {
       </div>
 
       {disputed.length > 0 && (
-        <div className="rounded-2xl border-2 border-stock-red bg-red-50 p-3">
+        <div className="rounded-2xl bg-red-50 p-3">
           <div className="flex items-center gap-2 font-hindi text-lg font-bold text-red-800"><Flag size={18} /> Customer ne galat bataya</div>
           <ul className="mt-1 text-sm text-red-900">
             {disputed.map((e) => <li key={e.id}>{shortDate(e.at)}: {inr(Math.abs(e.amount))} {e.note ? `(${e.note})` : ''}</li>)}
@@ -83,14 +81,14 @@ export default function KhataDetail() {
         </a>
       )}
 
-      <div className="font-hindi text-lg font-bold px-1">Hisaab</div>
-      <ul className="space-y-2">
+      <div className="font-hindi text-lg font-semibold">Hisaab</div>
+      <Rows>
         {c.entries.map((e) => {
           const credit = e.amount > 0
           const expanded = open === e.id
           return (
-            <li key={e.id} className={`rounded-2xl border bg-white ${e.disputed ? 'border-stock-red bg-red-50/50' : 'border-line'}`}>
-              <button onClick={() => setOpen(expanded ? null : e.id)} className="w-full min-h-[60px] px-3 py-2 flex items-center gap-3 text-left">
+            <li key={e.id} className={e.disputed ? 'bg-red-50' : ''}>
+              <button onClick={() => setOpen(expanded ? null : e.id)} className="w-full min-h-[60px] px-4 py-2 flex items-center gap-3 text-left">
                 <span className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${credit ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                   {credit ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
                 </span>
@@ -98,8 +96,8 @@ export default function KhataDetail() {
                   <div className="font-semibold truncate">{e.note || (credit ? 'Udhaar' : 'Jama')}</div>
                   <div className="text-xs text-ink-3">
                     {shortDate(e.at)}
-                    {e.confirmed_by_customer && <span className="ml-1 text-green-700">. customer ne maana</span>}
-                    {e.disputed && <span className="ml-1 text-stock-red font-bold">. GALAT BATAYA</span>}
+                    {e.confirmed_by_customer && <span className="ml-1 text-green-700">customer ne maana</span>}
+                    {e.disputed && <span className="ml-1 text-red-700 font-semibold">galat bataya</span>}
                   </div>
                 </div>
                 <div className="text-right tabular">
@@ -108,7 +106,7 @@ export default function KhataDetail() {
                 </div>
               </button>
               {expanded && (
-                <div className="px-3 pb-3 flex gap-2">
+                <div className="px-4 pb-3 flex gap-2">
                   <Btn size="sm" variant="ghost" icon={Check} className="flex-1" onClick={() => mark(e, 'confirm')}>Customer ne maana</Btn>
                   <Btn size="sm" variant="danger" icon={Flag} className="flex-1" onClick={() => mark(e, 'dispute')}>Galat hai</Btn>
                 </div>
@@ -116,7 +114,7 @@ export default function KhataDetail() {
             </li>
           )
         })}
-      </ul>
+      </Rows>
 
       <EntrySheet open={!!sheet} kind={sheet || 'credit'} customer={c} onClose={() => setSheet(null)} onChanged={() => reload({ quiet: true })} />
     </div>

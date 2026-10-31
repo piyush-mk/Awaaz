@@ -44,10 +44,10 @@ export default function MissedTab() {
       {data && data.items.length > 0 && (
         <>
           <div className="px-1 text-sm text-ink-3">Is hafte {data.total_asks} baar maanga gaya</div>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-line">
             {data.items.map((r) => (
-              <li key={r.product_name} className="bg-white rounded-2xl border border-line p-3 flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-ink text-paytm-blue flex items-center justify-center text-xl font-bold tabular flex-shrink-0">{r.count}</div>
+              <li key={r.product_name} className="py-3 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-bg-app text-ink flex items-center justify-center text-xl font-bold tabular flex-shrink-0">{r.count}</div>
                 <div className="min-w-0 flex-1">
                   <div className="font-hindi text-lg font-bold">{r.product_name}</div>
                   <div className="text-sm text-ink-3">{r.suggestion}</div>

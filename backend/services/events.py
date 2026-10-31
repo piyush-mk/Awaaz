@@ -15,6 +15,8 @@ import threading
 from collections import defaultdict, deque
 from typing import Any, AsyncIterator, Optional
 
+from sqlalchemy import event as sa_event
+
 HEARTBEAT_SECONDS = 15.0
 REPLAY_SIZE = 50
 
@@ -75,6 +77,15 @@ def publish(channel: str, event_type: str, data: Optional[dict[str, Any]] = None
     return bus.publish(channel, event_type, data)
 
 
+def publish_after_commit(db: Any, channel: str, event_type: str, data: Optional[dict[str, Any]] = None) -> None:
+    """Publish once `db` has committed, so a screen that refetches on this event reads the new data.
+    If the transaction rolls back, nothing is announced."""
+    if not db.in_transaction():
+        bus.publish(channel, event_type, data)
+        return
+    sa_event.listen(db, "after_commit", lambda _session: bus.publish(channel, event_type, data), once=True)
+
+
 def format_sse(event: dict) -> str:
     """Wire format: id / event / data lines followed by a blank line."""
     return f"id: {event['id']}\nevent: {event['type']}\ndata: {json.dumps(event['data'], ensure_ascii=False)}\n\n"
@@ -87,7 +98,8 @@ async def sse_stream(channel: str, last_event_id: int = 0,
     queue = bus.subscribe(channel)
     try:
         yield "retry: 2000\n\n"
-        yield format_sse({"id": 0, "type": "hello", "data": {"channel": channel}})
+        # No id line: an id here would reset the browser's Last-Event-ID, and the next reconnect would replay old events.
+        yield f"event: hello\ndata: {json.dumps({'channel': channel})}\n\n"
         for event in bus.replay(channel, last_event_id):
             yield format_sse(event)
         while True:

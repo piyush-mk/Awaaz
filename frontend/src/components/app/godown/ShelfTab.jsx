@@ -104,8 +104,8 @@ export default function ShelfTab() {
         {audit.note && <p className="text-xs text-ink-3 mt-1">{audit.note}</p>}
       </Card>
 
-      <div className="bg-white rounded-2xl border border-line overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2 text-[11px] font-semibold uppercase text-ink-3 bg-bg-app">
+      <div className="overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2 text-xs font-medium text-ink-3">
           <span>Item</span><span className="text-right">Book</span><span className="text-right">Mila</span><span className="text-right">Fark</span>
         </div>
         {rows.map((r) => (

@@ -19,7 +19,7 @@ export default function PhotoButton({
       ? 'bg-ink text-white active:bg-ink-2'
       : variant === 'blue'
         ? 'bg-paytm-blue text-ink active:bg-paytm-blue-dark'
-        : 'bg-white text-ink border border-line active:bg-bg-app'
+        : 'bg-white text-ink active:bg-bg-app'
   return (
     <>
       <input

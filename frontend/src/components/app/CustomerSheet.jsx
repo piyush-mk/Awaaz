@@ -25,7 +25,7 @@ export default function CustomerSheet({ open, onClose, onPick, title = 'Customer
           <li key={c.id}>
             <button
               onClick={() => onPick(c)}
-              className="w-full min-h-[56px] bg-white rounded-xl border border-line px-4 py-2 flex items-center justify-between text-left active:bg-bg-app"
+              className="w-full min-h-[56px] bg-bg-app rounded-xl px-4 py-2 flex items-center justify-between text-left active:bg-bg-app"
             >
               <span className="font-hindi text-lg font-bold text-ink">{c.name}</span>
               {c.balance > 0 ? <Chip tone={c.risk === 'high' ? 'red' : 'yellow'}>baaki {inr(c.balance)}</Chip> : <Chip tone="green">saaf</Chip>}

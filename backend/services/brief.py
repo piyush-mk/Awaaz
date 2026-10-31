@@ -167,7 +167,7 @@ def verify_numbers(text: str, facts: dict) -> tuple[bool, list[float]]:
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = (
-    "Tum Ramesh General Store ke munim ho aur subah ki brief bol rahe ho. Neeche JSON 'facts' hain. "
+    "Tum Ramesh General Store ki dukaan ke AI sahayak ho aur subah ki brief bol rahe ho. Neeche JSON 'facts' hain. "
     "Sirf unhi facts se 3 ya 4 chhote Hinglish (roman script) vaakya likho jo bolne mein aasaan hon.\n"
     "KADE NIYAM:\n"
     "1. Koi bhi number invent, round, jodna-ghatana ya anumaan mat karo. Sirf wahi numbers likho jo facts mein "

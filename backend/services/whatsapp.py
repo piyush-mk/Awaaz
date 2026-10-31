@@ -372,7 +372,7 @@ def notify(
     if not deliver:
         # Simulator only: the in-app WhatsApp view is the "phone", so the message is delivered there at once.
         message.status = "delivered"
-    events.publish(
+    events.publish_after_commit(db, 
         "wa",
         "wa_message",
         {
@@ -434,7 +434,7 @@ def apply_status_update(db: Session, wa_id: str, status: str, errors: Optional[l
     entry = db.get(KhataEntry, entry_id) if entry_id else None
     if entry is not None:
         entry.wa_status = {"read": "delivered"}.get(status, status)
-    events.publish("wa", "wa_status", {"id": msg.id, "status": status, "channel": msg.channel,
+    events.publish_after_commit(db, "wa", "wa_status", {"id": msg.id, "status": status, "channel": msg.channel,
                                        "wa_id": wa_id, "error": reason})
     return msg
 

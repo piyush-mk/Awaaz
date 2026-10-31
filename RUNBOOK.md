@@ -42,6 +42,7 @@ Edit `/opt/awaaz/backend/.env`, then `systemctl restart awaaz`.
 | Key | Effect if missing |
 |---|---|
 | `SARVAM_API_KEY` | Speech, LLM, spoken replies and vision fall back to fixtures and browser voice |
+| `SARVAM_STT_MODEL`, `SARVAM_TTS_MODEL`, `SARVAM_TTS_SPEAKER` | Leave unset to use the latest (`saaras:v4`, `bulbul:v4-flash`). An older pinned `saaras:v3` loses product-name hints |
 | `PAYTM_API_KEY` | Secondary LLM only |
 | `XAI_KEY` | Vision fallback only |
 | `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` | In-app WhatsApp simulator only (nothing breaks) |

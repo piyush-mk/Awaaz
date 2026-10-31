@@ -119,6 +119,15 @@ async def test_stt_keyterms_only_on_models_that_accept_them(live, monkeypatch):
 
 # --- TTS ---
 
+def test_tts_voice_follows_the_model(monkeypatch):
+    v4 = dataclasses.replace(sarvam.settings, sarvam_tts_model="bulbul:v4-flash", sarvam_tts_speaker="ritu")
+    monkeypatch.setattr(sarvam, "settings", v4)
+    assert sarvam._tts_speaker(None) == "simran_enhi_customer"
+    v3 = dataclasses.replace(sarvam.settings, sarvam_tts_model="bulbul:v3", sarvam_tts_speaker="simran_enhi_customer")
+    monkeypatch.setattr(sarvam, "settings", v3)
+    assert sarvam._tts_speaker(None) == "ritu"
+
+
 @pytest.mark.anyio
 async def test_tts_payload_and_audio_parse(live):
     seen = []
@@ -132,7 +141,7 @@ async def test_tts_payload_and_audio_parse(live):
     assert r.data == "QUJD" and r.source == "sarvam"
     body = seen[0]
     assert body["text"] == "Total 10,000 rupaye"
-    assert body["model"] == "bulbul:v3" and body["speaker"] == "ritu" and body["pace"] == 1.1
+    assert body["model"] == "bulbul:v4-flash" and body["speaker"] == "simran_enhi_customer" and body["pace"] == 1.1
     assert body["output_audio_codec"] == "mp3"
     assert "inputs" not in body and body.get("language_code") == "hi-IN"
 

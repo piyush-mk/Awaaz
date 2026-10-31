@@ -137,6 +137,17 @@ def prepare_tts_text(text: str) -> str:
     return out[:TTS_MAX_CHARS]
 
 
+def _tts_speaker(speaker: Optional[str]) -> str:
+    """Voice names differ by model and the API rejects the wrong kind: an old .env must not silence the app."""
+    name = speaker or settings.sarvam_tts_speaker
+    is_v4 = settings.sarvam_tts_model.startswith("bulbul:v4")
+    if is_v4 and "_" not in name:
+        return "simran_enhi_customer"
+    if not is_v4 and "_" in name:
+        return "ritu"
+    return name
+
+
 async def tts(text: str, language: str = "hi-IN", speaker: Optional[str] = None, pace: float = 1.0,
               codec: str = "mp3") -> Result[str]:
     """Synthesize speech. Returns data = base64 audio (`audios[0]` of the response)."""
@@ -144,7 +155,7 @@ async def tts(text: str, language: str = "hi-IN", speaker: Optional[str] = None,
     _require_key()
     payload: dict[str, Any] = {
         "text": prepare_tts_text(text), "model": settings.sarvam_tts_model,
-        "speaker": speaker or settings.sarvam_tts_speaker, "pace": pace,
+        "speaker": _tts_speaker(speaker), "pace": pace,
         "output_audio_codec": codec,
     }
     with Timer() as t:

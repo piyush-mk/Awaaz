@@ -550,3 +550,140 @@ def test_replies_are_always_clean(client, db, stocked):
 
 
 _STOCK_LEAK = re.compile(r"(?<![₹\d.])\b\d+\s*(?:\w+\s+)?(?:bache|bacha|left|in stock)\b", re.I)
+
+
+# --- unstocked items must be noted, never answered with another category ------------------
+
+
+def _missed(db, word):
+    db.expire_all()
+    return db.query(MissedSale).filter(MissedSale.product_name.ilike(f"%{word}%")).count()
+
+
+UNSTOCKED = [("Kurkure hai?", "kurkure"), ("kurkure milega?", "kurkure"), ("Lays chips hai kya", "lays"),
+             ("hide and seek biscuit hai?", "hide")]
+
+
+@pytest.mark.parametrize("text,word", UNSTOCKED)
+def test_unstocked_item_is_noted_and_never_answered_with_another_category(client, db, text, word):
+    before = _missed(db, word)
+    out = sim(client, text, phone=STRANGER)
+    assert out["routed"] == "chat"
+    reply = reply_text(client, out)
+    assert "stock mein nahi hai" in reply and "note kar liya" in reply
+    assert _missed(db, word) == before + 1
+    if word == "hide":  # the customer asked about biscuits, so the available biscuits are offered
+        assert "Parle-G" in reply and "Biscuits mein ye available hain" in reply
+    else:  # nothing the customer did not ask for
+        assert "Biscuits" not in reply and "Parle-G" not in reply and "Good Day" not in reply
+    assert_clean(reply)
+
+
+def test_stocked_item_still_answers_normally(client, db, stocked):
+    before = db.query(MissedSale).count()
+    reply = reply_text(client, sim(client, "Parle-G hai?", phone=STRANGER))
+    assert "Haan ji, Parle-G hai" in reply and "₹10" in reply
+    db.expire_all()
+    assert db.query(MissedSale).count() == before
+
+
+@pytest.mark.parametrize("steps", [
+    [tool("search_products", query="kurkure", category="biscuits"), say("Ji, biscuits mein Parle-G hai ₹10.")],
+    [tool("list_category", category="biscuits"), say("Ji, Parle-G aur Good Day hain, MRP ₹10.")],
+    [tool("search_products", query="snacks"), say("Ji, Haldiram Bhujia hai ₹55.")],
+])
+def test_llm_path_cannot_turn_an_unstocked_item_into_a_category_list(db, monkeypatch, steps):
+    use_llm(monkeypatch, steps)
+    before = _missed(db, "kurkure")
+    res = ask(db, "Kurkure hai?", phone=STRANGER)
+    assert "stock mein nahi hai" in res.text
+    assert "Parle-G" not in res.text and "Good Day" not in res.text and "Bhujia" not in res.text
+    assert _missed(db, "kurkure") == before + 1
+    assert any(a["tool"] == "note_request" for a in res.actions)
+
+
+def test_llm_path_model_answers_after_a_not_found_result(db, monkeypatch):
+    fake = use_llm(monkeypatch, [tool("search_products", query="kurkure"),
+                                 say("Kurkure abhi nahi hai ji, humne note kar liya.")])
+    res = ask(db, "kurkure milega?", phone=STRANGER)
+    assert "note kar liya" in res.text and res.handled_by == "sarvam"
+    assert "available_in_category" not in fake.calls[1]["messages"][0]["content"]
+
+
+# --- no tail on every reply, and the name only now and then -----------------------------
+
+NUDGE_WORDS = re.compile(r"chahiye toh|bol dijiye|bata dijiye|likh dijiye|bhej dijiye|pack kar|lena ho|"
+                         r"order karna|tell us", re.I)
+
+
+def test_only_product_answers_end_with_a_nudge_and_it_varies(client, stocked):
+    tails = []
+    for text in ("Parle-G hai?", "good day ka rate?", "biscuits hai?", "atta hai?", "dettol sabun hai?",
+                 "maggi hai kya"):
+        reply = reply_text(client, sim(client, text, phone=STRANGER))
+        tails.append(reply.split("\n")[-1])
+        assert NUDGE_WORDS.search(tails[-1]), reply
+    assert all(a != b for a, b in zip(tails, tails[1:])), tails  # never twice in a row
+    assert len(set(tails)) >= 3
+
+
+def test_no_nudge_after_khata_thanks_refusal_handoff_unlinked(client, db):
+    cases = [("mera kitna baaki hai", VERMA_PHONE), ("thank you", VERMA_PHONE), ("shukriya", VERMA_PHONE),
+             ("kaisa hai bhai", VERMA_PHONE), ("ok", VERMA_PHONE), ("mera kitna baaki hai", STRANGER),
+             (INJECTION, STRANGER), ("Delivery hoti hai kya?", STRANGER), ("mera order kahan hai", STRANGER),
+             ("Verma ji ka kitna baaki hai", SHARMA_PHONE), ("kal milte hain", STRANGER)]
+    for text, phone in cases:
+        wa_chat.reset_limits()
+        reply = reply_text(client, sim(client, text, phone=phone))
+        assert not NUDGE_WORDS.search(reply), (text, reply)
+
+
+def test_llm_nudge_dropped_after_khata_kept_after_products_and_never_repeated(db, monkeypatch, stocked):
+    nudge = "Chahiye toh bol dijiye, pack kar dete hain."
+    use_llm(monkeypatch, [tool("my_khata"), say(f"Ji, aapka kuch baaki nahi hai. {nudge}")])
+    res = ask(db, "mera balance?", phone=SHARMA_PHONE)
+    assert "pack kar" not in res.text and "baaki" in res.text
+    use_llm(monkeypatch, [say(f"Ji, theek hai. {nudge}")])
+    assert "pack kar" not in ask(db, "thanks bhai", phone=SHARMA_PHONE).text
+    first = say(f"Ji, Parle-G hai, ₹10 MRP, GST included. {nudge}")
+    use_llm(monkeypatch, [tool("search_products", query="parle g"), first])
+    a = ask(db, "parle g hai?", phone=STRANGER).text
+    assert a.endswith(nudge)
+    use_llm(monkeypatch, [tool("search_products", query="good day"), say(f"Ji, Good Day hai, ₹10 MRP. {nudge}")])
+    b = ask(db, "good day hai?", phone=STRANGER).text
+    assert not b.endswith(nudge) and NUDGE_WORDS.search(b.split(". ")[-1] + b)
+
+
+def test_system_prompt_limits_the_nudge_and_the_name(db, monkeypatch):
+    fake = use_llm(monkeypatch, [say("Ji.")])
+    ask(db, "hello", phone=VERMA_PHONE, history=[])
+    sys_ok = fake.calls[0]["messages"][0]["content"]
+    assert "Never after a khata balance" in sys_ok and "never reuse the nudge" in sys_ok
+    assert "once in this reply" in sys_ok and "never write 'Ji Verma ji'" in sys_ok
+    hist = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "Verma ji, boliye."}]
+    ask(db, "hello", phone=VERMA_PHONE, history=hist)
+    assert "do not use their name" in fake.calls[1]["messages"][0]["content"]
+    assert "Pack kar dete hain" not in sys_ok  # no single pinned phrase to copy
+
+
+def test_name_is_used_at_most_once_in_three_replies(client):
+    texts = ["mera kitna baaki hai", "thank you", "kaisa hai bhai", "mera order kahan hai", "mera kitna baaki hai",
+             "shukriya"]
+    replies = []
+    for t in texts:
+        wa_chat.reset_limits()
+        replies.append(reply_text(client, sim(client, t)))
+    used = ["Verma" in r for r in replies]
+    for i in range(len(used) - 2):
+        assert sum(used[i:i + 3]) <= 1, (used, replies)
+    assert not any("Ji Verma" in r or "ji Verma ji" in r for r in replies)
+
+
+def test_llm_double_name_opener_is_fixed(db, monkeypatch):
+    use_llm(monkeypatch, [say("Ji Verma ji, boliye kya chahiye?")])
+    assert ask(db, "hello bhai").text == "Verma ji, boliye kya chahiye?"
+    hist = [{"role": "assistant", "content": "Verma ji, boliye."}]
+    use_llm(monkeypatch, [say("Ji Verma ji, boliye kya chahiye?")])
+    assert ask(db, "hello bhai", history=hist).text == "Ji, boliye kya chahiye?"
+    use_llm(monkeypatch, [say("Dekhiye Verma ji, ye hai.")])
+    assert "Verma" not in ask(db, "hello bhai", history=hist).text

@@ -109,6 +109,7 @@ LIMITER = _Limiter()
 
 def reset_limits() -> None:
     LIMITER.reset()
+    _LAST_NUDGE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +226,9 @@ STOP = {
     "wala", "wali", "wale", "list", "show", "dikhao", "dikha", "sell", "selling", "bech", "bechte", "aaj",
     "abhi", "item", "items", "saman", "samaan", "cheez", "cheezein", "types", "type", "variety", "wagairah",
     "bhaiya", "bhai", "sir", "madam", "dost", "i", "want", "need", "buy", "get", "can", "u", "hello", "hey",
-    "per", "packet", "piece", "pcs", "wahin", "wale", "ji", "है", "हैं", "क्या", "कौन", "कौनसे", "कौन से",
+    "per", "packet", "piece", "pcs", "and", "acche", "accha", "achha", "acchi", "sasta", "sasti", "best", "naya",
+    "nayi", "mast", "tasty", "cheap", "popular", "famous", "brand", "branded", "different", "alag", "more", "other",
+    "new", "kuchh", "kisi", "sabse", "wahin", "wale", "ji", "है", "हैं", "क्या", "कौन", "कौनसे", "कौन से",
     "आपके", "पास", "मिलेगा", "मिलेगी", "का", "की", "के", "में", "भी", "कितना", "कितने", "रेट", "दाम",
 }
 
@@ -381,6 +384,8 @@ class Ctx:
     asked: bool = False
     noted: set[str] = field(default_factory=set)
     variant: int = 0
+    history: list[dict[str, str]] = field(default_factory=list)
+    _name_ok: Optional[bool] = None
 
     @property
     def known(self) -> Optional[Customer]:
@@ -404,13 +409,60 @@ class Ctx:
     def vary(self, options: list[str]) -> str:
         return options[self.variant % len(options)]
 
-    def nudge(self) -> str:
-        return self.say(self.vary(["Chahiye toh bol dijiye, pack kar dete hain.",
-                                   "Chahiye toh quantity bata dijiye, pack kar dete hain."]),
-                        "Tell us what you need and we will pack it.")
+    @property
+    def nm(self) -> str:
+        """The name to use in this reply, or "" when the last two replies already used it (so a name
+        appears at most once in three replies)."""
+        if not self.name:
+            return ""
+        if self._name_ok is None:
+            first = self.name.lower().split()[0]
+            recent = [h.get("content", "").lower() for h in self.history if h.get("role") == "assistant"][-2:]
+            self._name_ok = not any(first in t for t in recent)
+        return self.name if self._name_ok else ""
 
     def lead(self) -> str:
-        return f"{self.name}, " if self.name else "Ji, "
+        return f"{self.nm}, " if self.nm else "Ji, "
+
+    def ji(self) -> str:
+        """' Verma ji' when the name may be used, else ' ji'."""
+        return f" {self.nm}" if self.nm else " ji"
+
+    def pick_nudge(self) -> str:
+        """A gentle order nudge that differs from the one used last in this conversation."""
+        options = NUDGES_EN if self.english else NUDGES_HI
+        last = _LAST_NUDGE.get(self.phone, "")
+        prev = ""
+        for h in reversed(self.history):
+            if h.get("role") == "assistant":
+                prev = h.get("content", "").lower()
+                break
+        pick = options[self.variant % len(options)]
+        for k in range(len(options)):
+            cand = options[(self.variant + k) % len(options)]
+            if cand.lower() != last and cand.lower() not in prev:
+                pick = cand
+                break
+        _remember_nudge(self.phone, pick)
+        return pick
+
+
+NUDGES_HI = ["Chahiye toh bol dijiye, pack kar dete hain.",
+             "Kitna chahiye, bata dijiye.",
+             "Jo chahiye woh bhej dijiye, hum pack kar denge.",
+             "Order karna ho toh quantity likh dijiye, jaise '2 Maggi'.",
+             "Lena ho toh bas bol dijiye, abhi pack kar dete hain."]
+NUDGES_EN = ["Tell us what you need and we will pack it.", "Send the quantity when you are ready to order.",
+             "Want some? Just say how many."]
+_LAST_NUDGE: dict[str, str] = {}
+_NUDGE_RE = re.compile(r"chahiye toh|chahiye to|bol dijiye|bata dijiye|likh dijiye|bhej dijiye|pack kar|"
+                       r"order karna|lena ho|let us know|tell us|send the quantity|just say|want some", re.I)
+
+
+def _remember_nudge(phone: str, text: str) -> None:
+    if len(_LAST_NUDGE) > 5000:
+        _LAST_NUDGE.clear()
+    _LAST_NUDGE[phone] = text.strip().lower()
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +505,54 @@ def _describe(ctx: Ctx, rows: list[dict[str, Any]], label: str = "") -> str:
     return head + ", ".join(parts) + "." + tail
 
 
+def _available_members(ctx: Ctx, spec: dict[str, Any]) -> list[Product]:
+    stock = stock_ops.stock_map(ctx.db)
+    members = [p for p in ctx.db.query(Product).filter(Product.active.is_(True)).order_by(Product.id).all()
+               if _in_category(p, spec)]
+    vel = insights.velocity_map(ctx.db, today_local())
+    members.sort(key=lambda p: (-vel.get(p.id, 0.0), p.name))
+    return [p for p in members if stock.get(p.id, 0.0) > 0]
+
+
+def unmatched_item(ctx: Ctx) -> Optional[str]:
+    """The specific item the customer named when it is not in the catalog ("Kurkure hai?",
+    "hide and seek biscuit hai?"); None when the text names a catalog product or no specific item."""
+    spec, left = resolve_category(ctx.text)
+    left = [w for w in left if w not in NOT_ITEM]
+    if not left or len(left) > 3 or any(len(w) < 3 for w in left):
+        return None
+    if set(left) & (KHATA_WORDS | ORDER_WORDS | HOURS_WORDS | STORE_WORDS | THANKS | BYE | ACK | GREET):
+        return None
+    if find_products(catalog.load_index(ctx.db), left):
+        return None
+    return " ".join(left)
+
+
+def _not_found(ctx: Ctx, item: str, query: str = "") -> dict[str, Any]:
+    """Item not in the catalog. Says so and, only when the CUSTOMER's own text names a category ("hide and
+    seek biscuit hai?"), which items of that category ARE available. A category the model guessed is ignored."""
+    spec = resolve_category(ctx.text)[0]
+    shown = item[:1].upper() + item[1:]
+    data: dict[str, Any] = {"found": False, "query": query or item, "item": item,
+                            "note": "not stocked by the shop; call note_request(item) so the owner sees the demand. "
+                                    "Do not list any other category."}
+    if spec is not None:
+        names = [p.name for p in _available_members(ctx, spec)][:5]
+        if names:
+            data["available_in_category"] = {"category": spec["label"], "items": names}
+    return {"data": data, "line": ctx.say(f"{shown} abhi stock mein nahi hai.", f"{shown} is not in stock right now.")}
+
+
+def _alt_line(ctx: Ctx, data: dict[str, Any]) -> str:
+    alt = data.get("available_in_category")
+    if not alt:
+        return ""
+    names = ", ".join(alt["items"])
+    if ctx.english:
+        return f"In {alt['category']} we do have: {names}. Tell us if you want any."
+    return f"{alt['category'].capitalize()} mein ye available hain: {names}. Inme se kuch chahiye toh bol dijiye."
+
+
 def tool_search_products(ctx: Ctx, args: dict) -> dict[str, Any]:
     query = _arg_text(args, "query", 80)
     category = _arg_text(args, "category", 40)
@@ -461,16 +561,20 @@ def tool_search_products(ctx: Ctx, args: dict) -> dict[str, Any]:
     index = catalog.load_index(ctx.db)
     spec, left = resolve_category(f"{query} {category}".strip())
     prods = find_products(index, left) if left else []
-    if not prods and spec is not None:
+    if prods:
+        stock = stock_ops.stock_map(ctx.db)
+        rows = [_public(p, stock) for p in prods[:SEARCH_LIMIT]]
+        return {"data": {"found": True, "products": rows}, "line": _describe(ctx, rows)}
+    # a named item that is not in the catalog is "not stocked", never a different category's list
+    named = " ".join(w for w in left if w not in NOT_ITEM) if left else ""
+    if named:
+        return _not_found(ctx, named, query)
+    item = unmatched_item(ctx)
+    if item:
+        return _not_found(ctx, item, query)
+    if spec is not None:
         return tool_list_category(ctx, {"category": category or query})
-    if not prods:
-        item = " ".join(left) or query
-        return {"data": {"found": False, "query": query, "item": item,
-                         "note": "not in the shop's catalog; call note_request(item) so the owner sees the demand"},
-                "line": ctx.say(f"{item} abhi stock mein nahi hai.", f"{item} is not in stock right now.")}
-    stock = stock_ops.stock_map(ctx.db)
-    rows = [_public(p, stock) for p in prods[:SEARCH_LIMIT]]
-    return {"data": {"found": True, "products": rows}, "line": _describe(ctx, rows)}
+    return _not_found(ctx, query, query)
 
 
 def tool_list_category(ctx: Ctx, args: dict) -> dict[str, Any]:
@@ -481,12 +585,11 @@ def tool_list_category(ctx: Ctx, args: dict) -> dict[str, Any]:
     if spec is None:
         return tool_search_products(ctx, {"query": category}) if left else \
             {"data": {"found": False}, "line": ""}
+    item = unmatched_item(ctx)  # the customer asked for one specific item that we do not have
+    if item:
+        return _not_found(ctx, item, category)
     stock = stock_ops.stock_map(ctx.db)
-    members = [p for p in ctx.db.query(Product).filter(Product.active.is_(True)).order_by(Product.id).all()
-               if _in_category(p, spec)]
-    vel = insights.velocity_map(ctx.db, today_local())
-    members.sort(key=lambda p: (-vel.get(p.id, 0.0), p.name))
-    here = [p for p in members if stock.get(p.id, 0.0) > 0][:LIST_LIMIT]
+    here = _available_members(ctx, spec)[:LIST_LIMIT]
     if not here:
         item = spec["label"]
         return {"data": {"found": False, "category": spec["key"], "item": item,
@@ -554,9 +657,8 @@ def tool_my_last_order(ctx: Ctx, args: dict) -> dict[str, Any]:
                     "items": [i.name for i in inv.items][:5], "total": inv.total}
     if best is None:
         return {"data": {"found": False},
-                "line": ctx.say("Aapka koi pichla order nahi dikh raha. Naya order ke liye jaise '2 Parle-G' "
-                                "likh dijiye, ya voice note bhej dijiye.",
-                                "We cannot see a previous order. Send items like '2 Parle-G' or a voice note.")}
+                "line": ctx.say("Aapka koi pichla order mujhe nahi dikh raha.",
+                                "We cannot see a previous order for this number.")}
     table = _ORDER_WORDS if best["kind"] == "whatsapp order" else _INVOICE_WORDS
     hi, en = table.get(best["status"], ("process mein hai", "in progress"))
     items = ", ".join(best["items"])
@@ -672,17 +774,29 @@ def run_tool(ctx: Ctx, name: str, args: Any) -> Optional[dict[str, Any]]:
 
 
 def compose(ctx: Ctx, results: list[dict[str, Any]]) -> str:
+    """Plain wording of tool results. Only availability, price and category answers end with an order nudge."""
+    noted = any(r["name"] == "note_request" and r["data"].get("ok") for r in results)
     lines: list[str] = []
+    alts: list[str] = []
     shown = False
     for r in results:
+        d = r["data"]
         line = r.get("line") or ""
+        if r["name"] in ("search_products", "list_category") and d.get("found") is False:
+            if line and not noted and line not in lines:
+                lines.append(line)
+            alt = _alt_line(ctx, d)
+            if alt and alt not in alts:
+                alts.append(alt)
+            continue
         if line and line not in lines:
             lines.append(line)
         if r["name"] in ("search_products", "list_category") and any(
-                p["availability"] != "abhi nahi hai" for p in r["data"].get("products", [])):
+                p["availability"] != "abhi nahi hai" for p in d.get("products", [])):
             shown = True
+    lines += alts
     if shown:
-        lines.append(ctx.nudge())
+        lines.append(ctx.pick_nudge())
     return "\n".join(lines)
 
 
@@ -749,17 +863,18 @@ def rules_reply(ctx: Ctx, history: list[dict[str, str]]) -> tuple[str, list[dict
 
     # small talk
     if wset & THANKS and n <= 6:
-        return ctx.say(f"Arre koi baat nahi {ctx.name or 'ji'}. Aur kuch chahiye toh bol dijiye.",
-                       "You are welcome. Tell us if you need anything else."), []
+        return ctx.say(ctx.vary([f"Koi baat nahi{ctx.ji()}.", f"Arre koi baat nahi{ctx.ji()}, yeh toh hamara kaam hai.",
+                                 f"Aapka bhi shukriya{ctx.ji()}."]), "You are welcome."), []
     if wset & BYE and n <= 4:
         return ctx.say("Theek hai ji, phir milte hain. Dhyan rakhiye.", "Alright, see you soon. Take care."), []
     if n <= 3 and wset <= GREET:
-        return ctx.say(f"Namaste {ctx.name or 'ji'}! Boliye, kya chahiye?", "Hello! What can we get you?"), []
+        return ctx.say(f"Namaste{ctx.ji()}! Boliye.", "Hello! How can we help?"), []
     if (wset & {"kaisa", "kaise", "kaisi", "kese", "haal", "how"}) and not [w for w in words if w not in HOW_FILLERS]:
-        return ctx.say(f"Badhiya ji, sab theek hai. Aap batayiye {ctx.name or 'ji'}, kya chahiye?",
-                       "All good here, thank you. How can we help you today?"), []
+        return ctx.say(ctx.vary(["Badhiya ji, sab theek hai. Aap sunaiye.", f"Bas mast{ctx.ji()}, aap batayiye.",
+                                 "Sab badhiya hai ji. Aapka kya haal hai?"]),
+                       "All good here, thank you. And you?"), []
     if n <= 2 and wset <= ACK:
-        return ctx.say("Ji. Kuch chahiye toh bol dijiye.", "Sure. Tell us if you need anything."), []
+        return ctx.say(ctx.vary(["Ji, theek hai.", "Achha ji.", "Haan ji."]), "Sure."), []
 
     # own khata (never anybody else's)
     if wset & KHATA_WORDS:
@@ -793,6 +908,12 @@ def rules_reply(ctx: Ctx, history: list[dict[str, str]]) -> tuple[str, list[dict
     prods = find_products(index, left) if left else []
     results: list[dict[str, Any]] = []
     if prods or spec is not None:
+        item = None if prods else unmatched_item(ctx)
+        if item:  # a specific item we do not stock: say so, note it, offer what the category does have
+            r = run_tool(ctx, "search_products", {"query": item, "category": spec["key"] if spec else ""})
+            n_r = run_tool(ctx, "note_request", {"item_text": item})
+            results = [r] + ([n_r] if n_r else [])
+            return compose(ctx, results), results
         q = " ".join(left) if prods else spec["key"]
         r = run_tool(ctx, "search_products" if prods else "list_category",
                      {"query": q} if prods else {"category": spec["key"]})
@@ -801,7 +922,7 @@ def rules_reply(ctx: Ctx, history: list[dict[str, str]]) -> tuple[str, list[dict
                                              for p in r["data"].get("products", [])):
             n_r = run_tool(ctx, "note_request", {"item_text": r["data"].get("item") or q})
             if n_r and n_r["data"].get("ok"):
-                results = [n_r] if not r["data"].get("found") else results + [n_r]
+                results = results + [n_r]
         return compose(ctx, results), results
 
     # follow-ups: "kitne ka?", "wahi chahiye", "aur biscuits?" use the last product talked about
@@ -836,8 +957,14 @@ def rules_reply(ctx: Ctx, history: list[dict[str, str]]) -> tuple[str, list[dict
 def system_prompt(ctx: Ctx) -> str:
     prof = ctx.db.query(StoreProfile).order_by(StoreProfile.id).first()
     store = (prof.name if prof and prof.name else None) or settings.merchant_name
-    who = (f"The customer is {ctx.name}." if ctx.name else
-           "The customer's name is not known; do not guess one.")
+    if ctx.nm:
+        who = (f"The customer is {ctx.nm}. You may use this name once in this reply, as '{ctx.nm}, ...'; "
+               f"never write 'Ji {ctx.nm}'.")
+    elif ctx.name:
+        who = ("The customer's name was used in a recent reply, so do not use their name in this reply; "
+               "start with 'Ji,' or go straight to the answer.")
+    else:
+        who = "The customer's name is not known; do not guess one."
     if ctx.known is None:
         who += " This number is not linked to a customer, so you cannot discuss any khata."
     return (
@@ -850,13 +977,19 @@ def system_prompt(ctx: Ctx) -> str:
         "- No emoji, no em-dashes, no bullet lists, no markdown. Use the customer's name only now and then.\n"
         "- Light humour only occasionally, never about money, complaints or mistakes, never mocking.\n"
         "- Avoid gendered first-person verbs; say 'bata dete hain', 'pack kar dete hain'.\n"
-        "- End with a gentle nudge to order ('Chahiye toh bol dijiye, pack kar dete hain') only when it fits.\n\n"
+        "- Order nudge: only at the end of an availability, price or category answer, and only when it fits. "
+        "Never after a khata balance, thanks, small talk, a refusal, an order status, or when you pass a question "
+        "to the shopkeeper. Vary the wording every time ('Chahiye toh bol dijiye', 'Kitna chahiye, bata dijiye', "
+        "'Jo chahiye bhej dijiye, pack kar denge') and never reuse the nudge from your previous message.\n"
+        "- Use the customer's name at most once in every three replies, and never write 'Ji <name>,'.\n\n"
         "RULES\n"
         "- Use the tools for every fact about products, prices, availability, the customer's own khata, order "
         "status and store details. Never invent a product, price, offer, timing, address or policy.\n"
         "- When you state a price, say it is the MRP and that GST is included.\n"
         "- Say availability only as a word (available, kam bacha hai, abhi nahi hai). Never give a stock count.\n"
-        "- If a product is not stocked, call note_request and tell the customer it is noted.\n"
+        "- If the customer names a specific product that search_products does not find, it is not stocked: say so, "
+        "call note_request and tell the customer it is noted. If they asked about a category, you may then offer "
+        "the items of that category that ARE available. Never list a category the customer did not ask for.\n"
         "- If you are unsure, or the question is about hours, delivery, discounts, complaints or anything the "
         "tools do not cover, call ask_owner and say the shopkeeper will answer personally.\n"
         "- You cannot take orders in chat. If the customer wants to buy, ask them to send the items with a "
@@ -956,6 +1089,47 @@ async def _llm_answer(ctx: Ctx, history: list[dict[str, str]]) -> Optional[tuple
     return compose(ctx, results), source, results
 
 
+def _sentences(text: str) -> list[str]:
+    return [x.strip() for x in re.split(r"(?<=[.!?])\s+|\n+", text) if x.strip()]
+
+
+def finish_nudge(ctx: Ctx, text: str, results: list[dict[str, Any]]) -> str:
+    """An LLM reply may end with an order nudge only after an availability, price or category answer, and
+    never with the same nudge twice in a row. Otherwise a trailing nudge sentence is dropped."""
+    sents = _sentences(text)
+    if not sents or not _NUDGE_RE.search(sents[-1]):
+        return text
+    body, last = sents[:-1], sents[-1]
+    product_answer = any(
+        r["name"] in ("search_products", "list_category") and (
+            any(p["availability"] != "abhi nahi hai" for p in r["data"].get("products", []))
+            or r["data"].get("available_in_category")) for r in results)
+    if not body:
+        return text  # the whole reply is the question or offer itself
+    if not product_answer:
+        return " ".join(body)
+    prev = next((h.get("content", "").lower() for h in reversed(ctx.history) if h.get("role") == "assistant"), "")
+    key = last.strip().lower()
+    if key == _LAST_NUDGE.get(ctx.phone) or key in prev:
+        last = ctx.pick_nudge()
+    else:
+        _remember_nudge(ctx.phone, last)
+    return " ".join(body + [last])
+
+
+def tidy_name(ctx: Ctx, text: str) -> str:
+    """Fix 'Ji Verma ji,' and drop the customer's name when a recent reply already used it."""
+    if not ctx.name:
+        return text
+    first = re.escape(ctx.name.split()[0])
+    pat = rf"{first}(?:\s+ji)?"
+    text = re.sub(rf"\bji\s+({pat})\b", (lambda m: m.group(1)) if ctx.nm else "Ji", text, flags=re.I)
+    if not ctx.nm:
+        text = re.sub(rf"^\s*{pat}\s*,\s*", "Ji, ", text, flags=re.I)
+        text = re.sub(rf"\s*,?\s*\b{pat}\b", "", text, flags=re.I)
+    return re.sub(r"\s+([,.!?])", r"\1", text).strip()
+
+
 # ---------------------------------------------------------------------------
 # history + entry point
 # ---------------------------------------------------------------------------
@@ -1011,6 +1185,7 @@ async def reply(db: Session, inbound_message: Any, customer: Optional[Customer],
             history = load_history(db, phone, customer, exclude_id=ctx.message_id)
         history = [{"role": h.get("role", "user"), "content": clean_inbound(h.get("content"))[:300]}
                    for h in history][-HISTORY_MESSAGES:]
+        ctx.history = history
         answer: Optional[str] = None
         handled_by = "rules"
         try:
@@ -1020,6 +1195,8 @@ async def reply(db: Session, inbound_message: Any, customer: Optional[Customer],
         if got is not None:
             raw_text, handled_by, results = got
             answer = check_reply(ctx, raw_text, results, history)
+            if answer is not None:
+                answer = tidy_name(ctx, finish_nudge(ctx, answer, results))
             if answer is None and results:
                 answer = check_reply(ctx, compose(ctx, results), results, history)
                 handled_by = "rules"

@@ -794,7 +794,10 @@ def compose_spoken(db: Session, ctx: Ctx, out: Out, cart_changed: bool) -> tuple
         named = {"items": names} if plain and len(plain) <= 3 and len(names) <= 70 else {}
         if show_total:
             if plain:
-                line = voice_style.line("items_added", session=sid, total=reprice(db, lines_now).total, **named)
+                # Spoken confirmations stay short (TTS time grows with length): read the items back only when the
+                # whole line is ~48 characters or less; otherwise the screen shows them and the voice says the total.
+                line = voice_style.line("items_added", session=sid, total=reprice(db, lines_now).total,
+                                        max_chars=48, **named)
             else:
                 line = voice_style.line("total_now", session=sid, total=reprice(db, lines_now).total)
             total_said = True

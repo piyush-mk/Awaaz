@@ -70,6 +70,8 @@ async def stt(audio_bytes: bytes, filename: str = "audio.webm", language: str = 
 async def _stt_call(audio_bytes: bytes, filename: str, language: str, keyterms: list[str]) -> Result[dict]:
     mime = mimetypes.guess_type(filename)[0] or "audio/webm"
     data = {"model": settings.sarvam_stt_model, "language_code": language}
+    if settings.sarvam_stt_mode:
+        data["mode"] = settings.sarvam_stt_mode
     terms = [t[:64] for t in keyterms[:50] if t]
     if terms:
         data["keyterms"] = json.dumps(terms, ensure_ascii=False)

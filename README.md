@@ -48,7 +48,7 @@ If a page shows stale numbers, press **Reset demo data** on `/status` (the demo 
 | **Godown** (गोदाम) | Distributor bill photo to stock with a price guard (Surf Rs3 costlier) and a scheme guard (free packet not counted), expiry alerts and return-claim amounts, shelf photo audit, voice stock-in, missed-sale tracking |
 | **Khata** (खाता) | Udhaar by voice with an instant WhatsApp confirmation to the customer, credit limits from payment history, khata notebook photo import, salary-day reminders, simulated Paytm Postpaid offer at the counter, customer passbook page |
 | **Hisaab** (हिसाब) | Today's sales, payment split, hourly and 14-day charts, margin, invoices with public receipt pages, galla (cash) photo count checked against the day's bills |
-| **Salaah** (सलाह, from the header) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask about the shop" by voice, WhatsApp voice-note and photo orders from customers |
+| **Salaah** (सलाह, from the header) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask about the shop" by voice, WhatsApp voice-note and photo orders from customers, and a chat assistant that answers customers like the shopkeeper would (what is in stock, MRP prices, their own khata balance, order status, small talk) and passes anything it is unsure about to the owner |
 
 Any result that came from demo data carries a small `demo` chip, and `/status` shows which providers are live. Money and stock never change without the merchant's confirmation ("haan" or a tap).
 

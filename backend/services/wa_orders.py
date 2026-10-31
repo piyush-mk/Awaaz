@@ -12,6 +12,9 @@ exact same path:
        * audio / image / order-like text -> PendingAction(kind="wa_order", status "proposed"), packing
          list + UPI pay link replied to the customer, `wa_order` on `store`
        * "hi" -> a short greeting that tells the customer what they can send
+       * anything else in text (or a voice note that is not an order, or a question such as "Parle-G ka rate
+         kya hai") -> services.wa_chat: a shopkeeper-style answer (availability, MRP, own khata, order
+         status, small talk) or a handoff to the owner (`wa_question` on `store`)
 
 The caller owns the transaction (commit after `process`).
 """
@@ -27,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Customer, Message, PendingAction
-from services import catalog, events, khata, quantity, sarvam, vision
+from services import catalog, events, khata, quantity, sarvam, vision, wa_chat
 from services import whatsapp as wa
 from services.clock import now_local
 
@@ -230,11 +233,16 @@ async def process(db: Session, inb: Inbound) -> dict[str, Any]:
             return result
         if verdict is None and toks:
             outcome = quantity.parse_order_full(body, db)
-            if outcome.lines:
+            if outcome.lines and not wa_chat.prefers_chat(db, body, outcome.lines):
                 understood = (outcome.lines, outcome.unmatched, body, "rules", 0)
+        if understood is None and body.strip():
+            return await _chat(db, message, customer, inb, phone, result)
 
     if understood is not None:
         lines, unmatched, transcript, source, ms = understood
+        if (inb.type == "audio" and body.strip() and not media_error
+                and (not lines or wa_chat.prefers_chat(db, body, lines))):
+            return await _chat(db, message, customer, inb, phone, result)
         if lines:
             action, reply = create_order(db, customer, phone, lines, unmatched, transcript, inb.type, source,
                                          ms, media_ref, inb.profile_name)
@@ -244,6 +252,20 @@ async def process(db: Session, inb: Inbound) -> dict[str, Any]:
         reply = wa.notify(db, phone, "Maaf kijiye, samajh nahi aaya. Dobara voice note ya saaf photo bhejein.",
                           customer_id=customer.id if customer else None)
         result.update(routed="unrecognized", reply_message_id=reply.id)
+    return result
+
+
+async def _chat(db: Session, message: Message, customer: Optional[Customer], inb: Inbound, phone: str,
+                result: dict[str, Any]) -> dict[str, Any]:
+    """Conversation handler: answer like the shopkeeper. Sends nothing when rate limited or empty."""
+    history = wa_chat.load_history(db, phone, customer, exclude_id=message.id)
+    chat = await wa_chat.reply(db, message, customer, history, profile_name=inb.profile_name)
+    result["chat"] = {"handled_by": chat.handled_by, "actions": chat.actions}
+    if not chat.text:
+        result.update(routed="chat_" + chat.handled_by)
+        return result
+    reply = wa.notify(db, phone, chat.text, customer_id=customer.id if customer else None)
+    result.update(routed="chat", reply_message_id=reply.id, reply=chat.text)
     return result
 
 

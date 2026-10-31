@@ -325,9 +325,9 @@ def test_text_order_and_greeting_and_unrecognized(client):
     assert client.post("/api/wa/simulate-inbound", json={"from_phone": VERMA_PHONE, "type": "text",
                                                          "body": "hi"}).json()["routed"] == "greeting"
     assert client.post("/api/wa/simulate-inbound", json={"from_phone": VERMA_PHONE, "type": "text",
-                                                         "body": "kal milte hain"}).json()["routed"] == "stored"
+                                                         "body": "kal milte hain"}).json()["routed"] == "chat"
     assert client.post("/api/wa/simulate-inbound", json={"from_phone": VERMA_PHONE, "type": "audio",
-                                                         "body": "namaste ji"}).json()["routed"] == "unrecognized"
+                                                         "body": "namaste ji"}).json()["routed"] == "chat"
 
 
 def test_webhook_audio_downloads_media_and_routes_like_simulator(client, db, monkeypatch):

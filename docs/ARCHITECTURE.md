@@ -80,7 +80,21 @@ Legacy endpoints from the first prototype (`/api/voice`, `/api/inventory`, `/api
 
 ## Events
 
-Channel `store`: `cart_updated`, `utterance`, `action_proposed`, `action_resolved`, `checkout`, `payment_received`, `brief_ready`, `speech_ready`, `khata_updated`, `khata_disputed`, `wa_order`, `postpaid_approved`, `galla_closed`, `stock_updated`, `reorder_sent`, `demo_reset`. Channel `wa`: `wa_message`, `wa_status`.
+Channel `store`: `cart_updated`, `utterance`, `action_proposed`, `action_resolved`, `checkout`, `payment_received`, `brief_ready`, `speech_ready`, `khata_updated`, `khata_disputed`, `wa_order`, `wa_question`, `postpaid_approved`, `galla_closed`, `stock_updated`, `reorder_sent`, `demo_reset`. Channel `wa`: `wa_message`, `wa_status`.
+
+## WhatsApp conversation
+
+A customer who messages the shop number is answered like a shopkeeper would answer. `services/wa_orders.py` routes every inbound text (and the text of a voice note) in this order: a khata reply (sahi or galat) first, then an order ("2 maggi", "ek surf aur dal"), then a plain greeting, then the conversation handler `services/wa_chat.py`. A question with no quantity ("Parle-G ka rate kya hai", "kurkure hai?", "do you have atta?") goes to the conversation even if it names a product. A failed or empty transcription never reaches it.
+
+`wa_chat.reply(db, message, customer, history)` returns the text to send plus which path made it. With an LLM it uses Sarvam `sarvam-105b` (OpenRouter as backup) with seven customer-facing tools: `search_products`, `list_category`, `my_khata`, `my_last_order`, `store_info`, `note_request` and `ask_owner`. The model also sees the last 6 messages of that conversation so follow-ups work. Without an LLM (demo mode, no keys, or a failure) a rules path finds products and categories by keyword and answers in the same words; anything it cannot answer is passed to the owner with a `wa_question` event on the `store` channel.
+
+What it will and will not say:
+
+- Prices are always the MRP with GST included. Availability is a word only (available, kam bacha hai, abhi nahi hai); no stock count, cost price, margin, supplier or other customer is ever returned by a tool.
+- Khata and order status come only from the sender's own phone number. The tools take no customer argument, and an unknown number is refused.
+- An item the shop does not stock is saved as a missed sale, so the owner sees the demand. Timing, delivery, discounts and anything else that is not in the store profile go to the owner instead of being guessed.
+- Every reply is checked before it is sent: no emoji or em-dashes, no internal words, and every number must come from a tool result or from the conversation, otherwise the plain wording of the tool result is sent instead.
+- Inbound text is trimmed to 500 characters and treated as data, never as instructions. Limits: 20 conversational replies per phone per hour and 400 per day, counted in memory; past a limit nothing is sent and a line is logged. Replies go out through `services.whatsapp.notify`, so the simulator and the live allowlist behave as for every other message.
 
 ## Testing
 

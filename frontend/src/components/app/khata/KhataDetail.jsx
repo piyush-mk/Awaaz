@@ -47,18 +47,22 @@ export default function KhataDetail() {
   if (!c) return null
 
   const disputed = c.entries.filter((e) => e.disputed)
+  const st = statusOf(c)
   return (
     <div className="px-4 pb-16 space-y-3">
-      <Link to="/app/khata" className="-ml-1 inline-flex items-center gap-1 min-h-[44px] text-sm font-semibold text-ink-3">
-        <ChevronLeft size={18} /> Sab customer
+      <Link to="/app/khata" aria-label="Wapas" className="w-11 -ml-1 inline-flex items-center gap-1 min-h-[44px] text-sm font-semibold text-ink-3">
+        <ChevronLeft size={22} />
       </Link>
+      {c.passbook_url && (
+        <a href={toPath(c.passbook_url)} target="_blank" rel="noreferrer" className="float-right min-h-[44px] flex items-center gap-1 text-sm font-medium text-ink-3">
+          Passbook <ExternalLink size={14} />
+        </a>
+      )}
 
       <div>
-        <div className="font-hindi text-2xl font-semibold">{c.name}</div>
-        <div className="text-sm text-ink-3 mb-3">{c.phone || 'phone nahi hai'}</div>
-        <Hero value={inr(c.balance)} sub={c.balance > c.credit_limit ? null : `Limit ${inr(c.credit_limit)}`} />
-        <div className={`mt-1 text-[15px] ${statusOf(c).cls}`}>{statusOf(c).text}</div>
-        {c.limit_reason && <p className="mt-2 font-hindi text-base text-ink">{c.limit_reason}</p>}
+        <div className="font-hindi text-2xl font-semibold mb-2">{c.name}</div>
+        <Hero value={inr(c.balance)} sub={st ? null : `Limit ${inr(c.credit_limit)}`} />
+        {st && <div className={`mt-2 text-[15px] font-medium ${st.cls}`}>{st.text}</div>}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -75,13 +79,6 @@ export default function KhataDetail() {
         </div>
       )}
 
-      {c.passbook_url && (
-        <a href={toPath(c.passbook_url)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 min-h-[44px] text-sm font-semibold text-paytm-blue-dark">
-          <ExternalLink size={16} /> Customer ka passbook dekhein
-        </a>
-      )}
-
-      <div className="font-hindi text-lg font-semibold">Hisaab</div>
       <Rows>
         {c.entries.map((e) => {
           const credit = e.amount > 0
@@ -93,17 +90,16 @@ export default function KhataDetail() {
                   {credit ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold truncate">{e.note || (credit ? 'Udhaar' : 'Jama')}</div>
+                  <div className="font-semibold truncate">{credit ? 'Udhaar' : 'Jama'}</div>
                   <div className="text-xs text-ink-3">
                     {shortDate(e.at)}
-                    {e.confirmed_by_customer && <span className="ml-1 text-green-700">customer ne maana</span>}
+                    {e.confirmed_by_customer && <Check size={14} className="inline ml-1 text-green-700" aria-label="customer ne maana" />}
                     {e.disputed && <span className="ml-1 text-red-700 font-semibold">galat bataya</span>}
                   </div>
                 </div>
                 <div className="text-right tabular">
                   <div className={`font-bold ${credit ? 'text-orange-800' : 'text-green-700'}`}>{credit ? '+' : '-'}{inr(Math.abs(e.amount))}</div>
-                  <div className="text-xs text-ink-3">baaki {inr(e.running_balance)}</div>
-                </div>
+                                  </div>
               </button>
               {expanded && (
                 <div className="px-4 pb-3 flex gap-2">

@@ -38,7 +38,7 @@ If a page shows stale numbers, press **Reset demo data** on `/status` (the demo 
 | **Hisaab** (हिसाब) | Today's sales, payment split, hourly and 14-day charts, margin, invoices with public receipt pages, galla (cash) photo count checked against the day's bills |
 | **Salaah** (सलाह, from the header) | Spoken morning brief, festival-aware reorder drafts sent to suppliers on WhatsApp, "ask about the shop" by voice, WhatsApp voice-note and photo orders from customers |
 
-Every AI result carries a small `source / latency` chip so it is always clear what is live and what is demo data. Money and stock never change without the merchant's confirmation ("haan" or a tap).
+Any result that came from demo data carries a small `demo` chip, and `/status` shows which providers are live. Money and stock never change without the merchant's confirmation ("haan" or a tap).
 
 ## Pages
 

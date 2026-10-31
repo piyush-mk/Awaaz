@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { AlertTriangle, Loader2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertTriangle, Loader2, Search, X } from 'lucide-react'
 import SourceChip from './SourceChip'
 
 /** A quiet grouped block. Lists use `Rows` instead, so the screen is not a stack of boxes. */
@@ -150,6 +150,27 @@ export function Tabs({ items, value, onChange }) {
   )
 }
 
+/** A search that stays out of the way until it is wanted. */
+export function SearchToggle({ value, onChange, placeholder }) {
+  const [open, setOpen] = useState(false)
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} aria-label={placeholder} className="w-11 h-11 flex-shrink-0 rounded-full flex items-center justify-center text-ink-3">
+        <Search size={20} />
+      </button>
+    )
+  }
+  return (
+    <div className="relative flex-1 min-w-0">
+      <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
+      <input autoFocus className={`${inputCls} pl-10 pr-10`} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+      <button onClick={() => { onChange(''); setOpen(false) }} aria-label="Search band karein" className="absolute right-0 top-0 w-11 h-12 flex items-center justify-center text-ink-3">
+        <X size={18} />
+      </button>
+    </div>
+  )
+}
+
 /** Sort and filter choices: plain text, clearly lighter than Tabs. */
 export function Filters({ items, value, onChange }) {
   return (
@@ -200,7 +221,7 @@ export function Sheet({ open, onClose, title, children }) {
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-ink/50" onClick={onClose}>
       <div
         role="dialog"
-        aria-label={title}
+        aria-label={typeof title === 'string' ? title : undefined}
         className="sheet-up w-full max-w-[430px] max-h-[88vh] overflow-y-auto app-scroll bg-white rounded-t-3xl p-4 pb-6"
         onClick={(e) => e.stopPropagation()}
       >

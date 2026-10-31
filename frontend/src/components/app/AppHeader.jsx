@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ExternalLink, Lightbulb, MoreVertical } from 'lucide-react'
+import { ExternalLink, Keyboard, Lightbulb, MoreVertical } from 'lucide-react'
 import { useApp } from './AppContext'
 import { Sheet } from './ui'
+import { useVoice } from './VoiceContext'
 
-const TITLES = { godown: 'गोदाम', khata: 'खाता', hisaab: 'हिसाब', salaah: 'सलाह' }
+const TITLES = { counter: 'काउंटर', godown: 'गोदाम', khata: 'खाता', hisaab: 'हिसाब', salaah: 'सलाह' }
 
 const LINKS = [
   { to: '/soundbox', label: 'Soundbox' },
@@ -14,6 +15,7 @@ const LINKS = [
 
 export default function AppHeader() {
   const { storeName, connected, demo } = useApp()
+  const { openType } = useVoice()
   const { pathname } = useLocation()
   const [menu, setMenu] = useState(false)
   const room = pathname.split('/')[2]
@@ -23,14 +25,10 @@ export default function AppHeader() {
     <header className="bg-white flex-shrink-0 px-4 pt-[max(env(safe-area-inset-top),6px)]">
       <div className="h-12 flex items-center gap-1">
         <div className="min-w-0 flex-1">
-          {title ? (
-            <h1 className="font-hindi text-[22px] font-semibold leading-none">{title}</h1>
-          ) : (
-            <h1 className="text-[17px] font-semibold truncate">{storeName}</h1>
-          )}
+          <h1 className="font-hindi text-[22px] font-semibold leading-none truncate">{title || storeName}</h1>
         </div>
         {demo === 'fixtures' && (
-          <span className="rounded-full bg-orange-100 text-orange-800 text-[11px] font-semibold px-2 py-0.5 flex-shrink-0">demo data</span>
+          <span className="rounded-full bg-orange-100 text-orange-800 text-[11px] font-semibold px-2 py-0.5 flex-shrink-0">demo</span>
         )}
         <span
           role="status"
@@ -41,6 +39,9 @@ export default function AppHeader() {
           {!connected && 'offline'}
           <span className="sr-only">{connected ? 'live' : ''}</span>
         </span>
+        <button onClick={openType} aria-label="Type karein" className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0">
+          <Keyboard size={22} />
+        </button>
         <Link
           to="/app/salaah"
           aria-label="Salaah"
@@ -53,7 +54,8 @@ export default function AppHeader() {
           <MoreVertical size={22} />
         </button>
       </div>
-      <Sheet open={menu} onClose={() => setMenu(false)} title="Doosri screen">
+      <Sheet open={menu} onClose={() => setMenu(false)} title={storeName}>
+        <div className="text-sm text-ink-3 mb-1">Doosri screen</div>
         <ul className="divide-y divide-line">
           {LINKS.map((l) => (
             <li key={l.to}>

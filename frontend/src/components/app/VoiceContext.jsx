@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Keyboard, Mic, Send, Square, X } from 'lucide-react'
+import { Send, Square, X } from 'lucide-react'
 import ActionCard from './ActionCard'
 import SourceChip from './SourceChip'
 import { Chip, Sheet, Spinner, inputCls } from './ui'
@@ -74,12 +74,9 @@ function ResultSheet({ result, onClose, onActionDone }) {
   if (!result) return null
   const { transcript, spoken, understood, tables, source, latency, demo, actions } = result
   return (
-    <Sheet open onClose={onClose} title="Aapne kaha">
-      <div className="flex items-start gap-2">
-        <p className="flex-1 font-hindi text-lg italic text-ink">&ldquo;{transcript}&rdquo;</p>
-        <SourceChip source={source} latency={latency} demo={demo} />
-      </div>
-      {spoken && <p className="mt-2 font-hindi text-xl font-semibold leading-snug">{spoken}</p>}
+    <Sheet open onClose={onClose} title={<span data-heard className="italic font-normal text-lg">&ldquo;{transcript}&rdquo;</span>}>
+      <SourceChip source={source} latency={latency} demo={demo} />
+      {spoken && !actions?.length && <p className="mt-1 font-hindi text-xl font-semibold leading-snug">{spoken}</p>}
       {understood === false && <Chip tone="yellow" className="mt-2">samajh nahi aaya</Chip>}
       {(tables || []).map((t, i) => <AnswerTable key={i} table={t} />)}
       <div className="mt-3 space-y-3">
@@ -112,7 +109,7 @@ function TypeSheet({ open, room, busy, onClose, onSubmit }) {
     onSubmit(t)
   }
   return (
-    <Sheet open={open} onClose={onClose} title="Type karein">
+    <Sheet open={open} onClose={onClose} title="Likhein">
       <form onSubmit={send} className="flex gap-2">
         <input
           className={inputCls}
@@ -167,9 +164,6 @@ function Listening({ rec, thinking, room, onStop, onCancel }) {
             return <span key={i} className="w-[6px] rounded-full bg-paytm-blue transition-[height] duration-75" style={{ height: h }} />
           })}
         </div>
-        {!thinking && (
-          <p className="mt-8 text-center text-white/70 text-lg font-hindi italic">jaise: &ldquo;{room.hint}&rdquo;</p>
-        )}
       </div>
       <div className="pb-10 flex flex-col items-center min-h-[150px] justify-end">
         {thinking ? (
@@ -179,7 +173,6 @@ function Listening({ rec, thinking, room, onStop, onCancel }) {
             <button onClick={onStop} aria-label="Bhejein" className="w-[84px] h-[84px] rounded-full bg-accent text-ink flex items-center justify-center">
               <Square size={28} fill="currentColor" />
             </button>
-            <span className="mt-3 text-sm text-white/70">Chhodein ya dabayein, bhej dega</span>
           </>
         )}
       </div>
@@ -313,23 +306,5 @@ export function VoiceProvider({ children }) {
         }
       />
     </Ctx.Provider>
-  )
-}
-
-/** A room's reminder that it listens: says what to try, and opens typing for a noisy shop. */
-export function VoiceHint({ className = '' }) {
-  const { room, openType } = useVoice()
-  return (
-    <button
-      onClick={openType}
-      className={`w-full min-h-[56px] rounded-2xl bg-ink text-white px-4 py-2.5 flex items-center gap-3 text-left ${className}`}
-    >
-      <Mic size={20} className="flex-shrink-0 text-paytm-blue" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs text-white/70">Bolkar bataiye</span>
-        <span className="block font-hindi text-base italic truncate">&ldquo;{room.hint}&rdquo;</span>
-      </span>
-      <Keyboard size={18} className="flex-shrink-0 text-white/70" aria-label="ya type karein" />
-    </button>
   )
 }

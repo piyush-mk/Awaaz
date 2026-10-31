@@ -49,9 +49,8 @@ function Detail({ action }) {
             <span className="text-xl font-bold tabular">{inr(p.amount)}</span>
           </div>
           <div className="text-sm text-ink-3 tabular">
-            Baaki {inr(p.balance_before)} se {inr(Math.max(p.balance_after, 0))} ho jayega
+            Baaki {inr(Math.max(p.balance_after, 0))} ho jayega
           </div>
-          {p.late_payments > 0 && <div className="text-sm font-medium text-orange-800">{p.late_payments} baar late chukaya</div>}
         </div>
       )
     case 'restock':
@@ -94,7 +93,7 @@ export default function ActionCard({ action, onResolved }) {
 
   const warn =
     action.kind === 'add_udhaar' && p.over_limit
-      ? `Limit ${inr(p.credit_limit)} se upar ho jayega. Suggested limit ${inr(p.suggested_limit)}.`
+      ? `Limit ${inr(p.credit_limit)} se upar`
       : null
 
   return (

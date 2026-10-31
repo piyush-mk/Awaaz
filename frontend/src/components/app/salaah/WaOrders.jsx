@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Image as ImageIcon, MessageSquareText, Mic, ShoppingBasket } from 'lucide-react'
-import ConfirmCard from '../ConfirmCard'
+import { Check, Image as ImageIcon, MessageSquareText, Mic, ShoppingBasket, X } from 'lucide-react'
 import SourceChip from '../SourceChip'
 import { Btn, Card, Chip, Empty, ErrorBox, SkeletonList } from '../ui'
 import { useApp, useStoreEvent } from '../AppContext'
@@ -73,13 +72,14 @@ function OrderCard({ order, onResolved }) {
         </div>
       )}
       <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2">
-        <span className="text-ink-3 text-sm">Kul</span>
+        <span />
         <b className="text-xl tabular">{inr(p.total)}</b>
       </div>
 
-      <Btn variant="navy" icon={ShoppingBasket} className="w-full mt-3" busy={busy} onClick={toCounter}>Bill banao (counter par)</Btn>
-      <div className="mt-3">
-        <ConfirmCard question="Order pakka karun? Customer ko WhatsApp jayega" busy={busy} onYes={() => resolve('confirm')} onNo={() => resolve('cancel')} noLabel="Cancel" />
+      <div className="mt-3 flex gap-2">
+        <Btn variant="navy" icon={ShoppingBasket} className="flex-1" busy={busy} onClick={toCounter}>Bill banao</Btn>
+        <Btn variant="ghost" icon={Check} aria-label="Order pakka" className="!px-4" disabled={busy} onClick={() => resolve('confirm')} />
+        <Btn variant="ghost" icon={X} aria-label="Order radd" className="!px-4" disabled={busy} onClick={() => resolve('cancel')} />
       </div>
     </Card>
   )
@@ -95,7 +95,7 @@ export default function WaOrders() {
     <div className="space-y-3">
       {loading && !data && <SkeletonList rows={2} className="h-40" />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && data.length === 0 && <Empty icon={MessageSquareText} hi="Koi naya WhatsApp order nahi" en="Customer ka order yahin dikhega" />}
+      {data && data.length === 0 && <Empty icon={MessageSquareText} hi="Koi order nahi" />}
       {data?.map((o) => <OrderCard key={o.id} order={o} onResolved={() => reload({ quiet: true })} />)}
     </div>
   )

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { ErrorBox, Hero, Rows, SkeletonList, Tabs } from '../../components/app/ui'
-import { VoiceHint } from '../../components/app/VoiceContext'
 import { HourlyChart, SeriesChart } from '../../components/app/hisaab/Charts'
 import Galla from '../../components/app/hisaab/Galla'
 import Invoices from '../../components/app/hisaab/Invoices'
@@ -47,20 +46,15 @@ function Today() {
   if (error) return <ErrorBox error={error} onRetry={reload} />
   if (!d) return null
 
-  const delta = d.yesterday?.vs_last_week_pct
   const split = SPLIT.map((s) => ({ ...s, amount: d.payment_split[s.key] || 0, pct: d.payment_split_pct[s.key] || 0 })).filter((s) => s.amount > 0)
 
   return (
     <div className="space-y-5">
-      <Hero value={inr(d.today.sales)} sub={`${d.today.invoices} bill, avg ${inr(d.today.avg_bill, 0)}, margin ${inr(d.margin.margin, 0)}`} />
-
-      <VoiceHint />
+      <Hero value={inr(d.today.sales)} sub={`${d.today.invoices} bill, margin ${inr(d.margin.margin, 0)}`} />
 
       <div>
         <HourlyChart data={d.hourly} />
-        <div className="text-sm text-ink-3 mt-1">
-          Kal {inr(d.yesterday.sales)}, pichhle hafte se {delta >= 0 ? `${num(delta, 0)}% zyada` : `${num(Math.abs(delta), 0)}% kam`}
-        </div>
+        <div className="text-sm text-ink-3 mt-1">Kal {inr(d.yesterday.sales)}</div>
       </div>
 
       {split.length > 0 && (
@@ -79,7 +73,7 @@ function Today() {
       <div>
         <div className="font-hindi text-lg font-semibold mb-1">Sabse zyada bika</div>
         <Rows>
-          {d.top_items.map((t) => <Line key={t.product_id} label={t.name} sub={`${num(t.qty)} ${t.unit}`} value={inr(t.amount)} />)}
+          {d.top_items.map((t) => <Line key={t.product_id} label={`${t.name}, ${num(t.qty)} ${t.unit}`} value={inr(t.amount)} />)}
         </Rows>
       </div>
 
@@ -89,8 +83,8 @@ function Today() {
       </div>
 
       <Rows>
-        <Line label="Udhaar baaki" sub={`${d.udhaar.customers_with_balance} customer, ${d.udhaar.overdue_count} late`} value={inr(d.udhaar.total_outstanding)} />
-        <Line label="Stock ki value" sub={`${d.low_stock_count} item kam`} value={inr(d.total_stock_value)} />
+        <Line label="Udhaar baaki" value={inr(d.udhaar.total_outstanding)} />
+        <Line label="Stock ki value" value={inr(d.total_stock_value)} />
       </Rows>
     </div>
   )

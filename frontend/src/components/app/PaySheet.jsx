@@ -1,120 +1,92 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Banknote, Smartphone, BookOpen, SlidersHorizontal } from 'lucide-react'
-import { Sheet, Field, inputCls, Chip } from './ui'
-import ConfirmCard from './ConfirmCard'
+import { Sheet, Btn, inputCls } from './ui'
 import CustomerSheet from './CustomerSheet'
 import { inr } from '../../lib/format'
 
 const MODES = [
-  { id: 'upi', icon: Smartphone, hi: 'Paytm', en: 'UPI QR' },
-  { id: 'cash', icon: Banknote, hi: 'Cash', en: 'Naqad' },
-  { id: 'khata', icon: BookOpen, hi: 'Khata', en: 'Udhaar' },
-  { id: 'mix', icon: SlidersHorizontal, hi: 'Mix', en: 'Aadha-aadha' },
+  { id: 'upi', icon: Smartphone, label: 'Paytm' },
+  { id: 'cash', icon: Banknote, label: 'Cash' },
+  { id: 'khata', icon: BookOpen, label: 'Khata' },
+  { id: 'mix', icon: SlidersHorizontal, label: 'Mix' },
 ]
 
-/** Split-payment sheet: cash / UPI / khata. UPI is always "the rest". onConfirm({ splits?, customer_id? }). */
+/** Tap how the money came: that tap is the confirmation. Khata asks whose first; Mix asks how much of each. */
 export default function PaySheet({ open, onClose, total, customer, onConfirm, busy }) {
-  const [mode, setMode] = useState('upi')
+  const [mix, setMix] = useState(false)
   const [cash, setCash] = useState('')
   const [khata, setKhata] = useState('')
-  const [picked, setPicked] = useState(null)
-  const [pickOpen, setPickOpen] = useState(false)
+  const [pending, setPending] = useState(null) // splits waiting for a khata customer
 
   useEffect(() => {
     if (!open) return
-    setMode('upi')
+    setMix(false)
     setCash('')
     setKhata('')
-    setPicked(null)
+    setPending(null)
   }, [open])
 
-  const who = picked || customer || null
-  const cashN = mode === 'cash' ? total : mode === 'mix' ? Number(cash) || 0 : 0
-  const khataN = mode === 'khata' ? total : mode === 'mix' ? Number(khata) || 0 : 0
-  const upiN = Math.round((total - cashN - khataN) * 100) / 100
-  const invalid = upiN < 0 || (khataN > 0 && !who)
-
-  const summary = useMemo(
-    () =>
-      [cashN > 0 && `Cash ${inr(cashN)}`, upiN > 0 && `Paytm ${inr(upiN)}`, khataN > 0 && `Khata ${inr(khataN)}`]
-        .filter(Boolean)
-        .join(', '),
-    [cashN, upiN, khataN],
-  )
-
-  const go = () => {
-    const custId = who?.id ?? who?.customer_id
+  const custId = customer?.id ?? customer?.customer_id
+  const send = (splits, id = custId) => {
     const body = {}
-    if (custId) body.customer_id = custId
-    if (cashN > 0 || khataN > 0) body.splits = { cash: cashN, khata: khataN, upi: null }
+    if (id) body.customer_id = id
+    if (splits) body.splits = { ...splits, upi: null }
     onConfirm(body)
   }
+  const withKhata = (splits) => (custId ? send(splits) : setPending(splits))
+
+  const tap = (id) => {
+    if (id === 'upi') send(null)
+    else if (id === 'cash') send({ cash: total, khata: 0 })
+    else if (id === 'khata') withKhata({ cash: 0, khata: total })
+    else setMix(true)
+  }
+
+  const cashN = Number(cash) || 0
+  const khataN = Number(khata) || 0
+  const upiN = Math.round((total - cashN - khataN) * 100) / 100
 
   return (
-    <Sheet open={open} onClose={onClose} title="Paisa kaise milega?">
-      <div className="text-center mb-3">
-        <div className="text-sm text-ink-3">Bill total</div>
-        <div className="text-4xl font-bold tabular text-ink">{inr(total)}</div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        {MODES.map(({ id, icon: Icon, hi, en }) => (
-          <button
-            key={id}
-            onClick={() => setMode(id)}
-            className={`min-h-[72px] rounded-xl flex flex-col items-center justify-center gap-0.5 ${
-              mode === id ? 'bg-ink text-white' : 'bg-bg-app text-ink'
-            }`}
+    <Sheet open={open} onClose={onClose} title={<span className="text-3xl tabular">{inr(total)}</span>}>
+      {!mix ? (
+        <div className="grid grid-cols-2 gap-3">
+          {MODES.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => tap(id)}
+              disabled={busy}
+              className="min-h-[96px] rounded-2xl bg-bg-app flex flex-col items-center justify-center gap-2 text-lg font-semibold active:bg-line disabled:opacity-50"
+            >
+              <Icon size={28} className="text-paytm-blue-dark" />
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label="Cash" placeholder="Cash" value={cash} onChange={(e) => setCash(e.target.value)} autoFocus />
+            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label="Khata" placeholder="Khata" value={khata} onChange={(e) => setKhata(e.target.value)} />
+          </div>
+          <Btn
+            size="lg"
+            variant="navy"
+            className="w-full"
+            busy={busy}
+            disabled={upiN < 0 || (cashN <= 0 && khataN <= 0)}
+            onClick={() => (khataN > 0 ? withKhata({ cash: cashN, khata: khataN }) : send({ cash: cashN, khata: 0 }))}
           >
-            <Icon size={20} className={mode === id ? 'text-paytm-blue' : 'text-ink-3'} />
-            <span className="font-hindi text-sm font-bold leading-none">{hi}</span>
-            <span className={`text-[11px] leading-none ${mode === id ? 'text-white/70' : 'text-ink-3'}`}>{en}</span>
-          </button>
-        ))}
-      </div>
-
-      {mode === 'mix' && (
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <Field label="Cash kitna?">
-            <input className={inputCls} inputMode="decimal" placeholder="0" value={cash} onChange={(e) => setCash(e.target.value)} />
-          </Field>
-          <Field label="Khate mein kitna?">
-            <input className={inputCls} inputMode="decimal" placeholder="0" value={khata} onChange={(e) => setKhata(e.target.value)} />
-          </Field>
+            {upiN < 0 ? 'Bill se zyada' : upiN > 0 ? `Paytm ${inr(upiN)} ka QR` : 'Ho gaya'}
+          </Btn>
         </div>
       )}
-
-      {khataN > 0 && (
-        <button
-          onClick={() => setPickOpen(true)}
-          className="w-full min-h-[52px] mb-3 rounded-xl bg-bg-app px-4 flex items-center justify-between"
-        >
-          <span className="text-sm text-ink-3">Kiske khate mein</span>
-          <span className="font-hindi text-lg font-bold">{who ? who.name || who.customer : 'Customer chuniye'}</span>
-        </button>
-      )}
-
-      <div className="mb-3 rounded-xl bg-bg-app p-3 text-sm space-y-1 tabular">
-        <div className="flex justify-between"><span className="text-ink-3">Cash</span><b>{inr(cashN)}</b></div>
-        <div className="flex justify-between"><span className="text-ink-3">Paytm / UPI (QR)</span><b>{inr(Math.max(upiN, 0))}</b></div>
-        <div className="flex justify-between"><span className="text-ink-3">Khata</span><b>{inr(khataN)}</b></div>
-        {upiN < 0 && <Chip tone="red">Jod bill se zyada hai</Chip>}
-        {khataN > 0 && !who && <Chip tone="orange">Pehle customer chuniye</Chip>}
-      </div>
-
-      <ConfirmCard
-        question={`Bill banaun? ${summary || inr(total)}`}
-        busy={busy || invalid}
-        onNo={onClose}
-        onYes={go}
-        yesLabel="Haan"
-      />
       <CustomerSheet
-        open={pickOpen}
-        onClose={() => setPickOpen(false)}
+        open={!!pending}
+        onClose={() => setPending(null)}
         onPick={(c) => {
-          setPicked(c)
-          setPickOpen(false)
+          const splits = pending
+          setPending(null)
+          send(splits, c.id)
         }}
         title="Kiske khate mein?"
       />

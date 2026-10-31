@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Ear, Keyboard, ScanLine, UserRound, Sparkles } from 'lucide-react'
+import { Ear, ScanLine, UserRound } from 'lucide-react'
 import { useApp, useStoreEvent } from '../../components/app/AppContext'
 import { useVoice, useVoiceHandler } from '../../components/app/VoiceContext'
 import PhotoButton from '../../components/app/PhotoButton'
@@ -31,7 +31,7 @@ import {
 
 export default function Counter() {
   const { sessionId, showToast, showError } = useApp()
-  const { rec, busy, room, submit: voiceSubmit, openType } = useVoice()
+  const { rec, busy, room, submit: voiceSubmit } = useVoice()
 
   const [cart, setCart] = useState(null)
   const [stage, setStage] = useState('cart') // cart | pay | paid
@@ -313,78 +313,55 @@ export default function Counter() {
   const lines = cart?.lines || []
   const isEmpty = lines.length === 0
   const customer = cart?.customer
-  const status = rec.handsFree ? (rec.phase === 'speech' ? 'Sun liya, ruk kar bhejunga' : 'Sun raha hai') : 'Sun raha hai'
 
   return (
     <div className="relative min-h-full flex flex-col bg-bg-app">
       <div className="px-4 pt-3 pb-8 space-y-3 flex-1">
         {stage === 'cart' && (
           <div className="flex items-center gap-2">
-            <button onClick={() => setCustomerOpen(true)} className="flex-1 min-h-[44px] min-w-0 bg-white rounded-xl px-3 flex items-center gap-2 text-left">
-              {customer && <UserRound size={18} className="text-ink-3 flex-shrink-0" />}
-              <span className="text-sm font-semibold truncate">{customer ? customer.name : 'Customer'}</span>
-              {customer?.balance > 0 && <span className="ml-auto text-xs font-medium text-orange-800 whitespace-nowrap">baaki {inr(customer.balance)}</span>}
+            <button
+              onClick={() => setCustomerOpen(true)}
+              aria-label="Customer"
+              className="flex-1 min-h-[44px] min-w-0 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-white text-sm font-semibold"
+            >
+              <UserRound size={18} className="flex-shrink-0" />
+              <span className="truncate">{customer ? customer.name : 'Customer'}</span>
             </button>
+            <div className="flex-1 min-w-0"><PhotoButton icon={ScanLine} variant="outline" busy={parchiBusy} label="Parchi" onFiles={doParchi} className="w-full !min-h-[44px] !px-2 !gap-1.5 text-sm" /></div>
             <button
               onClick={toggleHandsFree}
               disabled={!rec.supported}
               aria-pressed={rec.handsFree}
               aria-label="Sun raha hai"
-              className={`min-h-[44px] px-3 rounded-xl flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap disabled:opacity-40 ${rec.handsFree ? 'bg-ink text-white' : 'bg-white text-ink'}`}
+              className={`flex-1 min-h-[44px] min-w-0 px-2 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold whitespace-nowrap disabled:opacity-40 ${rec.handsFree ? 'bg-ink text-white' : 'bg-white'}`}
             >
-              <Ear size={18} className={rec.handsFree ? 'text-paytm-blue' : ''} />
-              {rec.handsFree ? status : 'Sun raha hai'}
-            </button>
-            <PhotoButton compact icon={ScanLine} variant="outline" busy={parchiBusy} label="Parchi" onFiles={doParchi} className="!h-11 !w-11 !border-0 flex-shrink-0" />
-            <button onClick={openType} aria-label="Type karein" className="w-11 h-11 bg-white rounded-xl flex items-center justify-center flex-shrink-0">
-              <Keyboard size={20} />
+              <Ear size={18} className={`flex-shrink-0 ${rec.handsFree ? 'text-paytm-blue' : ''}`} />
+              {rec.handsFree ? 'Sun raha' : 'Sunta rahe'}
             </button>
           </div>
         )}
 
         {usual && stage === 'cart' && (
           <div className="bg-white rounded-2xl p-3 flex items-center gap-3">
-            <Sparkles size={22} className="text-accent flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="font-hindi text-lg font-semibold truncate">{usual.prompt || `${usual.customer?.name} ka usual?`}</div>
-              <div className="text-sm text-ink-3 truncate">{usual.lines.map((l) => l.name).join(', ')}, {inr(usual.total)}</div>
-            </div>
+            <div className="min-w-0 flex-1 font-hindi text-lg font-semibold truncate">{usual.customer?.name || customer?.name} ka usual? {inr(usual.total)}</div>
             <Btn size="sm" variant="navy" onClick={addUsual}>Haan</Btn>
           </div>
         )}
 
         {last && stage === 'cart' && (
-          <div className="bg-sky-100 rounded-2xl rounded-bl p-3">
-            <div className="flex items-start gap-2">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-sky-800">Aapne kaha</div>
-                <div className="font-hindi text-lg italic text-ink leading-snug">&ldquo;{last.transcript}&rdquo;</div>
-              </div>
-              <SourceChip source={last.source} latency={last.latency_ms} demo={last.demo_mode && last.source === 'fixture'} />
-            </div>
-            {last.spoken_text && <p className="mt-1 font-hindi text-base text-ink">{last.spoken_text}</p>}
-            {last.errors?.length > 0 && <p className="mt-1 text-sm text-red-700">{last.errors.join('; ')}</p>}
+          <div className="flex items-start gap-2 px-1">
+            <p data-heard className="flex-1 min-w-0 font-hindi text-base italic text-ink-3 leading-snug">{last.transcript ? `\u201C${last.transcript}\u201D` : last.spoken_text}</p>
+            <SourceChip source={last.source} latency={last.latency_ms} demo={last.demo_mode && last.source === 'fixture'} />
           </div>
         )}
 
-        {parchi && stage === 'cart' && (
-          <div className="bg-white rounded-2xl p-3">
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <div className="text-xs font-semibold text-ink-3">Parchi padh li</div>
-                <p className="font-hindi text-base font-semibold">{parchi.message_hi}</p>
-              </div>
-              <SourceChip source={parchi.source} latency={parchi.latency_ms} demo={parchi.demo_mode} />
-            </div>
-            {parchi.unmatched?.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {parchi.unmatched.map((u) => (
-                  <button key={u.name} onClick={() => noteMissed(u.name)} className="min-h-[44px] px-3 rounded-full bg-orange-50 text-sm font-semibold text-orange-900">
-                    {u.name} nahi hai: note karein
-                  </button>
-                ))}
-              </div>
-            )}
+        {parchi && stage === 'cart' && parchi.unmatched?.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {parchi.unmatched.map((u) => (
+              <button key={u.name} onClick={() => noteMissed(u.name)} className="min-h-[44px] px-3 rounded-full bg-orange-50 text-sm font-semibold text-orange-900">
+                {u.name} nahi hai
+              </button>
+            ))}
           </div>
         )}
 
@@ -411,18 +388,11 @@ export default function Counter() {
           <>
             <CartPanel cart={cart} onQty={changeQty} onRemove={removeLine} disabled={busy} />
             {isEmpty && !last && !pending.length && (
-              <div className="pt-10 text-center">
+              <div className="pt-16 text-center">
                 <div className="font-hindi text-3xl font-semibold text-ink leading-tight">Boliye, kya dena hai?</div>
-                <div className="mt-2 text-[15px] text-ink-3">Neeche mic dabayein aur bolein</div>
-                <ul className="mt-6 divide-y divide-line text-left">
-                  {room.examples.map((ex) => (
-                    <li key={ex}>
-                      <button onClick={() => voiceSubmit({ text: ex })} className="w-full min-h-[48px] font-hindi text-base italic text-ink-3 text-left">
-                        &ldquo;{ex}&rdquo;
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <button onClick={() => voiceSubmit({ text: room.examples[0] })} className="mt-3 min-h-[44px] px-2 font-hindi text-base italic text-ink-3">
+                  &ldquo;{room.hint}&rdquo;
+                </button>
               </div>
             )}
           </>

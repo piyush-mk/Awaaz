@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Banknote, Calculator, Volume2 } from 'lucide-react'
+import { Calculator, Volume2 } from 'lucide-react'
 import PhotoButton from '../PhotoButton'
 import ConfirmCard from '../ConfirmCard'
 import SourceChip from '../SourceChip'
-import { Btn, Card, Chip, ErrorBox, SkeletonList } from '../ui'
+import { Btn, Card, Chip, ErrorBox, Hero, SkeletonList } from '../ui'
 import { useApp, useStoreEvent } from '../AppContext'
 import useLoad from '../../../lib/useLoad'
 import { closeGalla, getGallaExpected, scanGalla } from '../../../api/client'
@@ -79,10 +79,9 @@ export default function Galla() {
     const t = difference(result.expected, result.counted)
     return (
       <Card className="text-center">
-        <Chip tone={t.tone}>{t.d === 0 ? 'sahi' : t.d < 0 ? 'kam' : 'zyada'}</Chip>
-        <div className="mt-2 font-hindi text-2xl font-bold leading-snug">{result.message_hi}</div>
+        <div className={`font-hindi text-3xl font-semibold ${t.tone === 'green' ? 'text-green-800' : t.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{t.d === 0 ? 'Bilkul sahi' : `${inr(Math.abs(t.d))} ${t.d < 0 ? 'kam' : 'zyada'}`}</div>
         <button onClick={() => speak({ spoken_text: result.message_hi, audio_base64: result.speech?.audio_base64 })} className="mt-2 inline-flex items-center gap-1 min-h-[44px] text-paytm-blue-dark font-semibold">
-          <Volume2 size={18} /> Dobara sunein
+          <Volume2 size={18} /> Sunein
         </button>
         <div className="mt-2 flex justify-center"><SourceChip source={result.source} latency={result.latency_ms} demo={result.demo_mode} /></div>
         <Btn variant="navy" className="w-full mt-4" onClick={() => { setResult(null); setCounts(null); setScan(null) }}>Theek hai</Btn>
@@ -92,21 +91,17 @@ export default function Galla() {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <div className="flex items-center gap-2 text-ink-3 text-sm"><Banknote size={18} /> Galle mein hona chahiye</div>
-        <div className="text-4xl font-bold tabular">{inr(exp.expected)}</div>
-        <div className="text-xs text-ink-3 tabular mt-1">
-          opening {inr(exp.opening_float)} + cash sale {inr(exp.cash_payments)} {exp.refunds ? `- refund ${inr(exp.refunds)}` : ''}
-        </div>
+      <div>
+        <Hero value={inr(exp.expected)} sub="Galle mein hona chahiye" />
         {exp.already_closed && (
-          <div className="mt-2 rounded-xl bg-green-50 px-3 py-2 text-sm text-green-900 font-medium">Aaj band ho chuka: {exp.already_closed.message_hi}</div>
+          <div className="mt-2 text-[15px] font-medium text-green-800">Aaj band ho chuka</div>
         )}
-      </Card>
+      </div>
 
       {!counts && (
         <div className="grid grid-cols-2 gap-3">
-          <PhotoButton variant="blue" label="Cash ki photo" busy={busy} onFiles={doScan} />
-          <Btn variant="ghost" icon={Calculator} onClick={startManual}>Haath se ginein</Btn>
+          <PhotoButton variant="blue" label="Photo" busy={busy} onFiles={doScan} />
+          <Btn variant="ghost" icon={Calculator} onClick={startManual}>Ginein</Btn>
         </div>
       )}
 
@@ -114,7 +109,7 @@ export default function Galla() {
         <>
           {scan && (
             <div className="flex items-center justify-between px-1">
-              <span className="text-sm text-ink-3">Photo se gina (galat ho toh theek karein)</span>
+              <span />
               <SourceChip source={scan.source} latency={scan.latency_ms} demo={scan.demo_mode} />
             </div>
           )}
@@ -156,10 +151,10 @@ export default function Galla() {
           <div className={`rounded-2xl p-4 text-center ${diff.tone === 'green' ? 'bg-green-50' : diff.tone === 'red' ? 'bg-red-50' : 'bg-yellow-50'}`}>
             <div className="text-xs text-ink-3">Gina hua</div>
             <div className="text-3xl font-bold tabular">{inr(counted)}</div>
-            <div className="font-hindi text-lg font-bold mt-1">{diff.text}</div>
+            <div className={`font-hindi text-lg font-bold mt-1 ${diff.tone === 'green' ? 'text-green-800' : diff.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{diff.d === 0 ? 'Bilkul sahi' : `${inr(Math.abs(diff.d))} ${diff.d < 0 ? 'kam' : 'zyada'}`}</div>
           </div>
 
-          <ConfirmCard question="Aaj ka galla band karun?" busy={closing} onYes={close} onNo={() => { setCounts(null); setScan(null) }} yesLabel="Haan, band karo" tone="orange" />
+          <ConfirmCard question="Galla band karun?" busy={closing} onYes={close} onNo={() => { setCounts(null); setScan(null) }} yesLabel="Haan" tone="orange" />
         </>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { tr } from '../lib/i18n'
 
 /**
  * Microphone recording for the merchant app.
@@ -200,7 +201,7 @@ export default function useRecorder({ onAudio, vad } = {}) {
       await ensureStream()
     } catch (err) {
       e.pttWanted = false
-      setError(err.name === 'NotAllowedError' ? 'Microphone ki permission chahiye' : 'Microphone nahi mila')
+      setError(err.name === 'NotAllowedError' ? tr('Microphone ki permission chahiye') : tr('Microphone nahi mila'))
       return false
     }
     if (!e.pttWanted) {
@@ -310,7 +311,7 @@ export default function useRecorder({ onAudio, vad } = {}) {
     try {
       await ensureStream()
     } catch (err) {
-      setError(err.name === 'NotAllowedError' ? 'Microphone ki permission chahiye' : 'Microphone nahi mila')
+      setError(err.name === 'NotAllowedError' ? tr('Microphone ki permission chahiye') : tr('Microphone nahi mila'))
       return false
     }
     e.mode = 'handsfree'

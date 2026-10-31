@@ -4,12 +4,13 @@ import BriefCard from '../../components/app/salaah/BriefCard'
 import ReorderCards from '../../components/app/salaah/ReorderCards'
 import AskTab from '../../components/app/salaah/AskTab'
 import WaOrders from '../../components/app/salaah/WaOrders'
+import { tr } from '../../lib/i18n'
 
 const TABS = [
-  { id: 'brief', label: 'Aaj' },
-  { id: 'reorder', label: 'Order' },
-  { id: 'ask', label: 'Puchhein' },
-  { id: 'orders', label: 'WhatsApp' },
+  { id: 'brief', label: tr('Aaj') },
+  { id: 'reorder', label: tr('Order') },
+  { id: 'ask', label: tr('Puchhein') },
+  { id: 'orders', label: tr('WhatsApp') },
 ]
 
 export default function Salaah() {

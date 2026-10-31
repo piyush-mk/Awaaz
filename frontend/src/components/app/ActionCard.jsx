@@ -4,14 +4,16 @@ import CustomerSheet from './CustomerSheet'
 import { confirmAction, cancelAction } from '../../api/client'
 import { inr, qtyLabel } from '../../lib/format'
 import { useApp } from './AppContext'
+import { nameOf } from '../../lib/i18n'
+import { tr } from '../../lib/i18n'
 
 const QUESTIONS = {
-  checkout: 'Bill banaun?',
-  split_payment: 'Is tarah paisa lun?',
-  add_udhaar: 'Khate mein likhun?',
-  record_khata_payment: 'Khate mein jama karun?',
-  restock: 'Stock mein jodun?',
-  set_price: 'Daam badal dun?',
+  checkout: tr('Bill banaun?'),
+  split_payment: tr('Is tarah paisa lun?'),
+  add_udhaar: tr('Khate mein likhun?'),
+  record_khata_payment: tr('Khate mein jama karun?'),
+  restock: tr('Stock mein jodun?'),
+  set_price: tr('Daam badal dun?'),
 }
 
 function Detail({ action }) {
@@ -30,12 +32,12 @@ function Detail({ action }) {
             .filter(([, v]) => v > 0)
             .map(([k, v]) => (
               <div key={k} className="flex justify-between text-base">
-                <span className="capitalize text-ink-3">{k === 'upi' ? 'Paytm / UPI' : k}</span>
+                <span className="capitalize text-ink-3">{k === 'upi' ? tr('Paytm / UPI') : tr(k === 'cash' ? tr('Cash') : k === 'khata' ? tr('Khata') : k)}</span>
                 <span className="font-bold tabular">{inr(v)}</span>
               </div>
             ))}
           <div className="flex justify-between border-t border-line pt-1 font-bold">
-            <span>Kul</span>
+            <span>{tr('Kul')}</span>
             <span className="tabular">{inr(p.total)}</span>
           </div>
         </div>
@@ -49,7 +51,7 @@ function Detail({ action }) {
             <span className="text-xl font-bold tabular">{inr(p.amount)}</span>
           </div>
           <div className="text-sm text-ink-3 tabular">
-            Baaki {inr(Math.max(p.balance_after, 0))} ho jayega
+            {tr('Baaki {amt} ho jayega', { amt: inr(Math.max(p.balance_after, 0)) })}
           </div>
         </div>
       )
@@ -58,7 +60,7 @@ function Detail({ action }) {
         <ul className="space-y-1">
           {(p.items || []).map((it) => (
             <li key={it.product_id} className="flex justify-between">
-              <span className="font-hindi text-lg font-bold">{it.name_hi || it.name}</span>
+              <span className="font-hindi text-lg font-bold">{nameOf(it)}</span>
               <span className="font-bold tabular">+{qtyLabel(it.quantity, it.unit)}</span>
             </li>
           ))}
@@ -93,13 +95,13 @@ export default function ActionCard({ action, onResolved }) {
 
   const warn =
     action.kind === 'add_udhaar' && p.over_limit
-      ? `Limit ${inr(p.credit_limit)} se upar`
+      ? tr('Limit {amt} se upar', { amt: inr(p.credit_limit) })
       : null
 
   return (
     <>
       <ConfirmCard
-        question={QUESTIONS[action.kind] || p.summary || 'Karun?'}
+        question={QUESTIONS[action.kind] || p.summary || tr('Karun?')}
         source={action.source}
         latency={action.latency_ms}
         demo={action.source === 'fixture'}
@@ -107,11 +109,11 @@ export default function ActionCard({ action, onResolved }) {
         busy={busy}
         onNo={() => resolve('cancel')}
         onYes={() => (needsCustomer ? setPickOpen(true) : resolve('confirm'))}
-        yesLabel={needsCustomer ? 'Customer chuniye' : 'Haan'}
+        yesLabel={needsCustomer ? tr('Customer chuniye') : tr('Haan')}
         tone={action.kind === 'add_udhaar' || action.kind === 'split_payment' ? 'orange' : 'blue'}
       >
         <Detail action={action} />
-        {customer && <div className="mt-2 text-sm text-ink-3">Khata: <b className="text-ink">{customer.name}</b></div>}
+        {customer && <div className="mt-2 text-sm text-ink-3">{tr('Khata')}: <b className="text-ink">{customer.name}</b></div>}
       </ConfirmCard>
       <CustomerSheet
         open={pickOpen}
@@ -120,7 +122,7 @@ export default function ActionCard({ action, onResolved }) {
           setCustomer(c)
           setPickOpen(false)
         }}
-        title="Kiske khate mein?"
+        title={tr('Kiske khate mein?')}
       />
     </>
   )

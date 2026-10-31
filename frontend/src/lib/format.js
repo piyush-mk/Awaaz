@@ -1,3 +1,5 @@
+import { lang, tr, unitOf } from './i18n'
+
 // Small formatting helpers shared by the merchant app screens.
 
 export function inr(value, decimals) {
@@ -15,16 +17,16 @@ export function num(value, max = 2) {
 /** 0.45 kg -> "450 g", 2 packet -> "2 packet" */
 export function qtyLabel(qty, unit) {
   const q = Number(qty || 0)
-  if (unit === 'kg' && q > 0 && q < 1) return `${Math.round(q * 1000)} g`
-  if (unit === 'l' && q > 0 && q < 1) return `${Math.round(q * 1000)} ml`
-  return `${num(q, 3)} ${unit || ''}`.trim()
+  if (unit === 'kg' && q > 0 && q < 1) return `${Math.round(q * 1000)} ${unitOf('g')}`
+  if (unit === 'l' && q > 0 && q < 1) return `${Math.round(q * 1000)} ${unitOf('ml')}`
+  return `${num(q, 3)} ${unitOf(unit)}`.trim()
 }
 
 export function shortDate(iso) {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10)
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  return d.toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' })
 }
 
 export function shortTime(iso) {
@@ -69,9 +71,9 @@ export function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n))
 }
 
-export function errMessage(e, fallback = 'Kuch gadbad ho gayi, dobara try karein') {
+export function errMessage(e, fallback = tr('Kuch gadbad ho gayi, dobara try karein')) {
   if (!e) return fallback
   const m = typeof e === 'string' ? e : e.message
-  if (!m || m === 'Failed to fetch' || /NetworkError/i.test(m)) return 'Server se connect nahi ho paya. Internet check karein.'
+  if (!m || m === 'Failed to fetch' || /NetworkError/i.test(m)) return tr('Server se connect nahi ho paya. Internet check karein.')
   return m
 }

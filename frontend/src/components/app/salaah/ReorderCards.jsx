@@ -7,6 +7,8 @@ import useLoad from '../../../lib/useLoad'
 import { draftReorder, listReorders, sendReorder } from '../../../api/client'
 import { speak } from '../../../lib/audio'
 import { inr, num } from '../../../lib/format'
+import { nameOf } from '../../../lib/i18n'
+import { tr } from '../../../lib/i18n'
 
 function PoCard({ po, onSent }) {
   const { showError } = useApp()
@@ -40,7 +42,7 @@ function PoCard({ po, onSent }) {
         <div className="min-w-0">
           <div className="font-hindi text-xl font-bold truncate">{po.supplier_name}</div>
         </div>
-        {po.festival && <Chip tone="orange">{po.festival.name} {po.festival.days_away}d</Chip>}
+        {po.festival && <Chip tone="orange">{po.festival.name}</Chip>}
       </div>
 
       <ul className="mt-3 divide-y divide-line">
@@ -48,7 +50,7 @@ function PoCard({ po, onSent }) {
           <li key={l.product_id} className="py-2">
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="font-hindi text-base font-bold truncate">{l.name_hi || l.name}</div>
+                <div className="font-hindi text-base font-bold truncate">{nameOf(l)}</div>
               </div>
               {l.multiplier > 1 && <Chip tone="orange">{l.multiplier}x</Chip>}
             </div>
@@ -58,7 +60,7 @@ function PoCard({ po, onSent }) {
               ) : (
                 <Stepper value={l.qty} step={l.unit === 'kg' ? 1 : l.qty >= 50 ? 10 : 1} unit={l.unit} onChange={(v) => setQty((s) => ({ ...s, [l.product_id]: v }))} />
               )}
-              <span className="text-sm text-ink-3 tabular">{num(l.current_stock)} bacha</span>
+              <span className="text-sm text-ink-3 tabular">{tr('{n} bacha', { n: num(l.current_stock) })}</span>
             </div>
           </li>
         ))}
@@ -75,10 +77,10 @@ function PoCard({ po, onSent }) {
         </div>
       ) : asking ? (
         <div className="mt-3">
-          <ConfirmCard question="Order bhejun?" busy={busy} onYes={send} onNo={() => setAsking(false)} yesLabel="Haan" tone="orange" />
+          <ConfirmCard question={tr('Order bhejun?')} busy={busy} onYes={send} onNo={() => setAsking(false)} yesLabel={tr('Haan')} tone="orange" />
         </div>
       ) : (
-        <Btn variant="navy" icon={MessageCircle} className="w-full mt-3" onClick={() => setAsking(true)}>WhatsApp bhejo</Btn>
+        <Btn variant="navy" icon={MessageCircle} className="w-full mt-3" onClick={() => setAsking(true)}>{tr('WhatsApp bhejo')}</Btn>
       )}
     </Card>
   )
@@ -104,10 +106,10 @@ export default function ReorderCards() {
 
   return (
     <div className="space-y-3">
-      <Btn size="lg" variant="primary" icon={PackageSearch} busy={drafting} className="w-full" onClick={draft}>Order banao</Btn>
+      <Btn size="lg" variant="primary" icon={PackageSearch} busy={drafting} className="w-full" onClick={draft}>{tr('Order banao')}</Btn>
       {loading && !data && <SkeletonList rows={2} className="h-40" />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && data.orders.length === 0 && <Empty icon={Truck} hi="Koi order nahi" />}
+      {data && data.orders.length === 0 && <Empty icon={Truck} hi={tr('Koi order nahi')} />}
       {data?.unassigned?.length > 0 && (
         <div className="rounded-xl bg-yellow-50 px-3 py-2 text-sm text-yellow-900">
           Supplier tay nahi: {data.unassigned.map((u) => u.name || u.product_name || u).join(', ')}

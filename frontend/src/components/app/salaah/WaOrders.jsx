@@ -7,6 +7,8 @@ import { useApp, useStoreEvent } from '../AppContext'
 import useLoad from '../../../lib/useLoad'
 import { addCartLines, attachCartCustomer, cancelWaOrder, confirmWaOrder, listWaOrders } from '../../../api/client'
 import { inr, qtyLabel } from '../../../lib/format'
+import { nameOf } from '../../../lib/i18n'
+import { tr } from '../../../lib/i18n'
 
 const ICON = { text: MessageSquareText, audio: Mic, image: ImageIcon }
 
@@ -21,7 +23,7 @@ function OrderCard({ order, onResolved }) {
     setBusy(true)
     try {
       await (kind === 'confirm' ? confirmWaOrder(order.id) : cancelWaOrder(order.id))
-      showToast(kind === 'confirm' ? 'Customer ko WhatsApp bhej diya' : 'Order cancel kiya', kind === 'confirm' ? 'success' : 'warning')
+      showToast(kind === 'confirm' ? tr('Customer ko WhatsApp bhej diya') : tr('Order cancel kiya'), kind === 'confirm' ? 'success' : 'warning')
       onResolved()
     } catch (e) {
       showError(e)
@@ -37,7 +39,7 @@ function OrderCard({ order, onResolved }) {
       await addCartLines(sessionId, p.lines.map((l) => ({ product_id: l.product_id, qty: l.qty, unit: l.unit })), 'add')
       // The order is now being billed: take it off this list and tell the customer.
       await confirmWaOrder(order.id).catch(() => {})
-      showToast('Counter par bill taiyaar')
+      showToast(tr('Counter par bill taiyaar'))
       navigate('/app/counter')
     } catch (e) {
       showError(e)
@@ -60,7 +62,7 @@ function OrderCard({ order, onResolved }) {
       <ul className="mt-3 divide-y divide-line">
         {p.lines.map((l) => (
           <li key={l.product_id} className="py-1.5 flex items-center justify-between">
-            <span className="font-hindi text-base font-bold">{l.name_hi || l.name}</span>
+            <span className="font-hindi text-base font-bold">{nameOf(l)}</span>
             <span className="text-sm text-ink-3 tabular">{qtyLabel(l.qty, l.unit)}</span>
             <b className="tabular w-16 text-right">{inr(l.line_total)}</b>
           </li>
@@ -68,7 +70,7 @@ function OrderCard({ order, onResolved }) {
       </ul>
       {p.unmatched?.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {p.unmatched.map((u, i) => <Chip key={i} tone="yellow">nahi mila: {u.name}</Chip>)}
+          {p.unmatched.map((u, i) => <Chip key={i} tone="yellow">{tr('{name} nahi hai', { name: u.name })}</Chip>)}
         </div>
       )}
       <div className="mt-2 flex items-baseline justify-between border-t border-line pt-2">
@@ -77,9 +79,9 @@ function OrderCard({ order, onResolved }) {
       </div>
 
       <div className="mt-3 flex gap-2">
-        <Btn variant="navy" icon={ShoppingBasket} className="flex-1" busy={busy} onClick={toCounter}>Bill banao</Btn>
-        <Btn variant="ghost" icon={Check} aria-label="Order pakka" className="!px-4" disabled={busy} onClick={() => resolve('confirm')} />
-        <Btn variant="ghost" icon={X} aria-label="Order radd" className="!px-4" disabled={busy} onClick={() => resolve('cancel')} />
+        <Btn variant="navy" icon={ShoppingBasket} className="flex-1" busy={busy} onClick={toCounter}>{tr('Bill banao')}</Btn>
+        <Btn variant="ghost" icon={Check} aria-label={tr('Order pakka')} className="!px-4" disabled={busy} onClick={() => resolve('confirm')} />
+        <Btn variant="ghost" icon={X} aria-label={tr('Order radd')} className="!px-4" disabled={busy} onClick={() => resolve('cancel')} />
       </div>
     </Card>
   )
@@ -95,7 +97,7 @@ export default function WaOrders() {
     <div className="space-y-3">
       {loading && !data && <SkeletonList rows={2} className="h-40" />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && data.length === 0 && <Empty icon={MessageSquareText} hi="Koi order nahi" />}
+      {data && data.length === 0 && <Empty icon={MessageSquareText} hi={tr('Koi order nahi')} />}
       {data?.map((o) => <OrderCard key={o.id} order={o} onResolved={() => reload({ quiet: true })} />)}
     </div>
   )

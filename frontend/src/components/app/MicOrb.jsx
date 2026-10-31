@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { Mic, Square, Ear } from 'lucide-react'
+import { tr } from '../../lib/i18n'
 
 /**
  * The big Paytm-style mic. Hold to talk (release sends), or tap once to start and tap again to send.
@@ -51,7 +52,7 @@ export default function MicOrb({ rec, busy, size = 84, onUnsupported }) {
       )}
       <button
         type="button"
-        aria-label={rec.recording ? 'Bhejne ke liye chhodein' : 'Bolne ke liye dabayein'}
+        aria-label={rec.recording ? tr('Bhejne ke liye chhodein') : tr('Bolne ke liye dabayein')}
         className={`orb relative rounded-full flex items-center justify-center text-white transition-colors ${
           active ? 'bg-accent' : rec.handsFree ? 'bg-ink' : 'bg-paytm-blue'
         } ${busy ? 'opacity-60' : ''}`}

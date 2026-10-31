@@ -2,22 +2,23 @@ import { NavLink } from 'react-router-dom'
 import { Store, Warehouse, BookOpen, BarChart3 } from 'lucide-react'
 import MicOrb from './MicOrb'
 import { useVoice } from './VoiceContext'
+import { tr } from '../../lib/i18n'
 
 // Four rooms and the mic. Salaah opens from the header.
 const LEFT = [
-  { to: '/app/counter', icon: Store, hi: 'काउंटर', en: 'Counter' },
-  { to: '/app/godown', icon: Warehouse, hi: 'गोदाम', en: 'Godown' },
+  { to: '/app/counter', icon: Store, label: tr('Counter') },
+  { to: '/app/godown', icon: Warehouse, label: tr('Godown') },
 ]
 const RIGHT = [
-  { to: '/app/khata', icon: BookOpen, hi: 'खाता', en: 'Khata' },
-  { to: '/app/hisaab', icon: BarChart3, hi: 'हिसाब', en: 'Hisaab' },
+  { to: '/app/khata', icon: BookOpen, label: tr('Khata') },
+  { to: '/app/hisaab', icon: BarChart3, label: tr('Hisaab') },
 ]
 
-function Room({ to, icon: Icon, hi, en }) {
+function Room({ to, icon: Icon, label }) {
   return (
     <NavLink
       to={to}
-      aria-label={en}
+      aria-label={tr(label)}
       className={({ isActive }) =>
         `flex-1 min-h-[68px] flex flex-col items-center justify-center gap-1 transition-colors ${isActive ? 'text-ink' : 'text-ink-3'}`
       }
@@ -25,7 +26,7 @@ function Room({ to, icon: Icon, hi, en }) {
       {({ isActive }) => (
         <>
           <Icon size={22} strokeWidth={isActive ? 2.2 : 1.7} className={isActive ? 'text-paytm-blue-dark' : ''} />
-          <span className={`font-hindi text-[13px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{hi}</span>
+          <span className={`font-hindi text-[13px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>{tr(label)}</span>
         </>
       )}
     </NavLink>

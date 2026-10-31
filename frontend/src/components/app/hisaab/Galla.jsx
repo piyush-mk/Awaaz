@@ -9,13 +9,14 @@ import useLoad from '../../../lib/useLoad'
 import { closeGalla, getGallaExpected, scanGalla } from '../../../api/client'
 import { speak } from '../../../lib/audio'
 import { inr } from '../../../lib/format'
+import { tr } from '../../../lib/i18n'
 
 const DENOMS = ['2000', '500', '200', '100', '50', '20', '10']
 
 function difference(expected, counted) {
   const d = Math.round((counted - expected) * 100) / 100
   if (d === 0) return { d, tone: 'green', text: `${inr(expected)} hona chahiye tha, ${inr(counted)} hai. Bilkul sahi.` }
-  return { d, tone: d < 0 ? 'red' : 'yellow', text: `${inr(expected)} hona chahiye tha, ${inr(counted)} hai. ${inr(Math.abs(d))} ${d < 0 ? 'kam' : 'zyada'}.` }
+  return { d, tone: d < 0 ? 'red' : 'yellow', text: `${inr(expected)} hona chahiye tha, ${inr(counted)} hai. ${inr(Math.abs(d))} ${d < 0 ? tr('kam') : tr('zyada')}.` }
 }
 
 /** Galla closing: expected cash, photo count, editable denominations, close the day. */
@@ -79,12 +80,12 @@ export default function Galla() {
     const t = difference(result.expected, result.counted)
     return (
       <Card className="text-center">
-        <div className={`font-hindi text-3xl font-semibold ${t.tone === 'green' ? 'text-green-800' : t.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{t.d === 0 ? 'Bilkul sahi' : `${inr(Math.abs(t.d))} ${t.d < 0 ? 'kam' : 'zyada'}`}</div>
+        <div className={`font-hindi text-3xl font-semibold ${t.tone === 'green' ? 'text-green-800' : t.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{t.d === 0 ? tr('Bilkul sahi') : tr(t.d < 0 ? '{amt} kam' : '{amt} zyada', { amt: inr(Math.abs(t.d)) })}</div>
         <button onClick={() => speak({ spoken_text: result.message_hi, audio_base64: result.speech?.audio_base64 })} className="mt-2 inline-flex items-center gap-1 min-h-[44px] text-paytm-blue-dark font-semibold">
-          <Volume2 size={18} /> Sunein
+          <Volume2 size={18} /> {tr('Sunein')}
         </button>
         <div className="mt-2 flex justify-center"><SourceChip source={result.source} latency={result.latency_ms} demo={result.demo_mode} /></div>
-        <Btn variant="navy" className="w-full mt-4" onClick={() => { setResult(null); setCounts(null); setScan(null) }}>Theek hai</Btn>
+        <Btn variant="navy" className="w-full mt-4" onClick={() => { setResult(null); setCounts(null); setScan(null) }}>{tr('Theek hai')}</Btn>
       </Card>
     )
   }
@@ -92,16 +93,16 @@ export default function Galla() {
   return (
     <div className="space-y-3">
       <div>
-        <Hero value={inr(exp.expected)} sub="Galle mein hona chahiye" />
+        <Hero value={inr(exp.expected)} sub={tr('Galle mein hona chahiye')} />
         {exp.already_closed && (
-          <div className="mt-2 text-[15px] font-medium text-green-800">Aaj band ho chuka</div>
+          <div className="mt-2 text-[15px] font-medium text-green-800">{tr('Aaj band ho chuka')}</div>
         )}
       </div>
 
       {!counts && (
         <div className="grid grid-cols-2 gap-3">
-          <PhotoButton variant="blue" label="Photo" busy={busy} onFiles={doScan} />
-          <Btn variant="ghost" icon={Calculator} onClick={startManual}>Ginein</Btn>
+          <PhotoButton variant="blue" label={tr('Photo')} busy={busy} onFiles={doScan} />
+          <Btn variant="ghost" icon={Calculator} onClick={startManual}>{tr('Ginein')}</Btn>
         </div>
       )}
 
@@ -133,7 +134,7 @@ export default function Galla() {
               )
             })}
             <div className="flex items-center gap-3 py-2">
-              <div className="w-16 font-bold">Sikke</div>
+              <div className="w-16 font-bold">{tr('Sikke')}</div>
               <span className="text-ink-3">=</span>
               <input
                 inputMode="decimal"
@@ -149,12 +150,12 @@ export default function Galla() {
           ))}
 
           <div className={`rounded-2xl p-4 text-center ${diff.tone === 'green' ? 'bg-green-50' : diff.tone === 'red' ? 'bg-red-50' : 'bg-yellow-50'}`}>
-            <div className="text-xs text-ink-3">Gina hua</div>
+            <div className="text-xs text-ink-3">{tr('Gina hua')}</div>
             <div className="text-3xl font-bold tabular">{inr(counted)}</div>
-            <div className={`font-hindi text-lg font-bold mt-1 ${diff.tone === 'green' ? 'text-green-800' : diff.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{diff.d === 0 ? 'Bilkul sahi' : `${inr(Math.abs(diff.d))} ${diff.d < 0 ? 'kam' : 'zyada'}`}</div>
+            <div className={`font-hindi text-lg font-bold mt-1 ${diff.tone === 'green' ? 'text-green-800' : diff.tone === 'red' ? 'text-red-700' : 'text-yellow-900'}`}>{diff.d === 0 ? tr('Bilkul sahi') : tr(diff.d < 0 ? '{amt} kam' : '{amt} zyada', { amt: inr(Math.abs(diff.d)) })}</div>
           </div>
 
-          <ConfirmCard question="Galla band karun?" busy={closing} onYes={close} onNo={() => { setCounts(null); setScan(null) }} yesLabel="Haan" tone="orange" />
+          <ConfirmCard question={tr('Galla band karun?')} busy={closing} onYes={close} onNo={() => { setCounts(null); setScan(null) }} yesLabel={tr('Haan')} tone="orange" />
         </>
       )}
     </div>

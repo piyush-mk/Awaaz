@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2, Search, X } from 'lucide-react'
 import SourceChip from './SourceChip'
+import { tr } from '../../lib/i18n'
 
 /** A quiet grouped block. Lists use `Rows` instead, so the screen is not a stack of boxes. */
 export function Card({ className = '', children, ...rest }) {
@@ -91,11 +92,11 @@ export function ErrorBox({ error, onRetry }) {
     <div className="rounded-2xl bg-red-50 p-4 flex gap-3 items-start">
       <AlertTriangle size={20} className="text-stock-red flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <div className="font-hindi font-semibold text-ink">Kuch gadbad ho gayi</div>
+        <div className="font-hindi font-semibold text-ink">{tr('Kuch gadbad ho gayi')}</div>
         <div className="text-sm text-ink-3 break-words">{error.message || String(error)}</div>
         {onRetry && (
           <button onClick={() => onRetry()} className="mt-2 min-h-[44px] px-4 rounded-xl bg-ink text-white font-semibold text-sm">
-            Dobara try karein
+            {tr('Dobara try karein')}
           </button>
         )}
       </div>
@@ -164,7 +165,7 @@ export function SearchToggle({ value, onChange, placeholder }) {
     <div className="relative flex-1 min-w-0">
       <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3" />
       <input autoFocus className={`${inputCls} pl-10 pr-10`} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
-      <button onClick={() => { onChange(''); setOpen(false) }} aria-label="Search band karein" className="absolute right-0 top-0 w-11 h-12 flex items-center justify-center text-ink-3">
+      <button onClick={() => { onChange(''); setOpen(false) }} aria-label={tr('Search band karein')} className="absolute right-0 top-0 w-11 h-12 flex items-center justify-center text-ink-3">
         <X size={18} />
       </button>
     </div>
@@ -194,14 +195,14 @@ export function Stepper({ value, onChange, step = 1, min = 0, unit }) {
   const inc = () => onChange(Math.round((Number(value) + step) * 1000) / 1000)
   return (
     <div className="inline-flex items-center rounded-xl bg-bg-app">
-      <button onClick={dec} aria-label="kam" className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-l-xl">
+      <button onClick={dec} aria-label={tr('kam')} className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-l-xl">
         &minus;
       </button>
       <div className="min-w-[44px] px-1 text-center font-semibold tabular text-ink">
         {value}
         {unit ? <span className="text-xs text-ink-3 ml-0.5">{unit}</span> : null}
       </div>
-      <button onClick={inc} aria-label="zyada" className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-r-xl">
+      <button onClick={inc} aria-label={tr('zyada')} className="w-11 h-11 flex items-center justify-center text-xl font-semibold text-ink active:bg-line rounded-r-xl">
         +
       </button>
     </div>
@@ -227,7 +228,7 @@ export function Sheet({ open, onClose, title, children }) {
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-hindi text-xl font-semibold text-ink">{title}</h3>
-          <button onClick={onClose} aria-label="band karo" className="w-11 h-11 flex items-center justify-center rounded-full bg-bg-app">
+          <button onClick={onClose} aria-label={tr('band karo')} className="w-11 h-11 flex items-center justify-center rounded-full bg-bg-app">
             <X size={20} />
           </button>
         </div>

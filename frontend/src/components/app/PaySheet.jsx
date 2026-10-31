@@ -3,12 +3,13 @@ import { Banknote, Smartphone, BookOpen, SlidersHorizontal } from 'lucide-react'
 import { Sheet, Btn, inputCls } from './ui'
 import CustomerSheet from './CustomerSheet'
 import { inr } from '../../lib/format'
+import { tr } from '../../lib/i18n'
 
 const MODES = [
-  { id: 'upi', icon: Smartphone, label: 'Paytm' },
-  { id: 'cash', icon: Banknote, label: 'Cash' },
-  { id: 'khata', icon: BookOpen, label: 'Khata' },
-  { id: 'mix', icon: SlidersHorizontal, label: 'Mix' },
+  { id: 'upi', icon: Smartphone, label: tr('Paytm') },
+  { id: 'cash', icon: Banknote, label: tr('Cash') },
+  { id: 'khata', icon: BookOpen, label: tr('Khata') },
+  { id: 'mix', icon: SlidersHorizontal, label: tr('Mix') },
 ]
 
 /** Tap how the money came: that tap is the confirmation. Khata asks whose first; Mix asks how much of each. */
@@ -58,15 +59,15 @@ export default function PaySheet({ open, onClose, total, customer, onConfirm, bu
               className="min-h-[96px] rounded-2xl bg-bg-app flex flex-col items-center justify-center gap-2 text-lg font-semibold active:bg-line disabled:opacity-50"
             >
               <Icon size={28} className="text-paytm-blue-dark" />
-              {label}
+              {tr(label)}
             </button>
           ))}
         </div>
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label="Cash" placeholder="Cash" value={cash} onChange={(e) => setCash(e.target.value)} autoFocus />
-            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label="Khata" placeholder="Khata" value={khata} onChange={(e) => setKhata(e.target.value)} />
+            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label={tr('Cash')} placeholder={tr('Cash')} value={cash} onChange={(e) => setCash(e.target.value)} autoFocus />
+            <input className={`${inputCls} text-center text-lg`} inputMode="decimal" aria-label={tr('Khata')} placeholder={tr('Khata')} value={khata} onChange={(e) => setKhata(e.target.value)} />
           </div>
           <Btn
             size="lg"
@@ -76,7 +77,7 @@ export default function PaySheet({ open, onClose, total, customer, onConfirm, bu
             disabled={upiN < 0 || (cashN <= 0 && khataN <= 0)}
             onClick={() => (khataN > 0 ? withKhata({ cash: cashN, khata: khataN }) : send({ cash: cashN, khata: 0 }))}
           >
-            {upiN < 0 ? 'Bill se zyada' : upiN > 0 ? `Paytm ${inr(upiN)} ka QR` : 'Ho gaya'}
+            {upiN < 0 ? tr('Bill se zyada') : upiN > 0 ? tr('Paytm {amt} ka QR', { amt: inr(upiN) }) : tr('Ho gaya')}
           </Btn>
         </div>
       )}
@@ -88,7 +89,7 @@ export default function PaySheet({ open, onClose, total, customer, onConfirm, bu
           setPending(null)
           send(splits, c.id)
         }}
-        title="Kiske khate mein?"
+        title={tr('Kiske khate mein?')}
       />
     </Sheet>
   )

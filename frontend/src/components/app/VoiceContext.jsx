@@ -9,10 +9,11 @@ import useRecorder from '../../hooks/useRecorder'
 import { askShop, sendUtterance } from '../../api/client'
 import { speak } from '../../lib/audio'
 import { inr } from '../../lib/format'
+import { tr } from '../../lib/i18n'
 
 const ASK_EXAMPLES = ['aaj ki sale kitni hai', 'is hafte sabse zyada kya bika', 'verma ji ka kitna baaki hai']
 
-/** What the mic does in each room. */
+/** What the mic does in each room. Examples are shown translated but sent like this: the parser knows these forms. */
 const ROOMS = {
   counter: { context: 'counter', hint: 'do maggi, ek surf excel', examples: ['do maggi ek surf excel chaar colgate', 'bees rupaye ki cheeni', 'bas kitna hua'] },
   godown: { context: 'stock', hint: 'das packet maggi, paanch kilo chawal', examples: ['das packet maggi paanch kilo chawal', 'aashirvaad atta teen bag tata namak chaar packet'] },
@@ -77,7 +78,7 @@ function ResultSheet({ result, onClose, onActionDone }) {
     <Sheet open onClose={onClose} title={<span data-heard className="italic font-normal text-lg">&ldquo;{transcript}&rdquo;</span>}>
       <SourceChip source={source} latency={latency} demo={demo} />
       {spoken && !actions?.length && <p className="mt-1 font-hindi text-xl font-semibold leading-snug">{spoken}</p>}
-      {understood === false && <Chip tone="yellow" className="mt-2">samajh nahi aaya</Chip>}
+      {understood === false && <Chip tone="yellow" className="mt-2">{tr('samajh nahi aaya')}</Chip>}
       {(tables || []).map((t, i) => <AnswerTable key={i} table={t} />)}
       <div className="mt-3 space-y-3">
         {(actions || []).map((a) => (
@@ -87,7 +88,7 @@ function ResultSheet({ result, onClose, onActionDone }) {
             onResolved={(res, action, kind) => {
               onActionDone(action.id)
               if (kind === 'confirm') {
-                showToast(res.spoken_text || 'Ho gaya')
+                showToast(tr('Ho gaya'))
                 speak(res)
               }
             }}
@@ -109,12 +110,12 @@ function TypeSheet({ open, room, busy, onClose, onSubmit }) {
     onSubmit(t)
   }
   return (
-    <Sheet open={open} onClose={onClose} title="Likhein">
+    <Sheet open={open} onClose={onClose} title={tr('Likhein')}>
       <form onSubmit={send} className="flex gap-2">
         <input
           className={inputCls}
-          aria-label="Type karein"
-          placeholder={room.hint}
+          aria-label={tr('Type karein')}
+          placeholder={tr(room.hint)}
           value={text}
           onChange={(e) => setText(e.target.value)}
           autoFocus
@@ -122,7 +123,7 @@ function TypeSheet({ open, room, busy, onClose, onSubmit }) {
         <button
           type="submit"
           disabled={!text.trim() || busy}
-          aria-label="Bhejein"
+          aria-label={tr('Bhejein')}
           className="w-12 h-12 flex-shrink-0 rounded-xl bg-paytm-blue text-ink flex items-center justify-center disabled:opacity-50"
         >
           <Send size={20} />
@@ -132,7 +133,7 @@ function TypeSheet({ open, room, busy, onClose, onSubmit }) {
         {room.examples.map((ex) => (
           <li key={ex}>
             <button onClick={() => send(null, ex)} className="w-full min-h-[48px] text-left font-hindi text-base text-ink-3">
-              &ldquo;{ex}&rdquo;
+              &ldquo;{tr(ex)}&rdquo;
             </button>
           </li>
         ))}
@@ -148,9 +149,9 @@ function Listening({ rec, thinking, room, onStop, onCancel }) {
   return (
     <div className="listen-in absolute inset-0 z-30 bg-ink text-white flex flex-col" role="status" aria-live="polite">
       <div className="flex items-center justify-between px-4 pt-4 min-h-[60px]">
-        <span className="text-base text-white/70">{thinking ? 'Samajh raha hoon' : 'Sun raha hoon'}</span>
+        <span className="text-base text-white/70">{thinking ? tr('Samajh raha hoon') : tr('Sun raha hoon')}</span>
         {!thinking && (
-          <button onClick={onCancel} aria-label="Radd karein" className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center">
+          <button onClick={onCancel} aria-label={tr('Radd karein')} className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center">
             <X size={20} />
           </button>
         )}
@@ -170,7 +171,7 @@ function Listening({ rec, thinking, room, onStop, onCancel }) {
           <Spinner size={32} className="text-paytm-blue" />
         ) : (
           <>
-            <button onClick={onStop} aria-label="Bhejein" className="w-[84px] h-[84px] rounded-full bg-accent text-ink flex items-center justify-center">
+            <button onClick={onStop} aria-label={tr('Bhejein')} className="w-[84px] h-[84px] rounded-full bg-accent text-ink flex items-center justify-center">
               <Square size={28} fill="currentColor" />
             </button>
           </>
@@ -281,7 +282,7 @@ export function VoiceProvider({ children }) {
       )}
       {busy && !spokenPtt && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-[104px] z-20 rounded-full bg-ink text-white text-sm px-4 py-2 flex items-center gap-2" role="status">
-          <Spinner size={14} /> Samajh raha hoon
+          <Spinner size={14} /> {tr('Samajh raha hoon')}
         </div>
       )}
       <TypeSheet

@@ -1,5 +1,6 @@
 import { Check, X } from 'lucide-react'
 import SourceChip from './SourceChip'
+import { tr } from '../../lib/i18n'
 
 /**
  * Anything that moves money or stock waits behind this card: big Haan / Nahi.
@@ -12,8 +13,8 @@ export default function ConfirmCard({
   onYes,
   onNo,
   busy,
-  yesLabel = 'Haan',
-  noLabel = 'Nahi',
+  yesLabel = tr('Haan'),
+  noLabel = tr('Nahi'),
   warn,
   source,
   latency,

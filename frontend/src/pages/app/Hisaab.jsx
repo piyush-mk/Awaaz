@@ -6,20 +6,21 @@ import Invoices from '../../components/app/hisaab/Invoices'
 import { useStoreEvent } from '../../components/app/AppContext'
 import useLoad from '../../lib/useLoad'
 import { getDashboardV2 } from '../../api/client'
-import { inr, num } from '../../lib/format'
+import { inr, qtyLabel } from '../../lib/format'
+import { tr } from '../../lib/i18n'
 
 const TABS = [
-  { id: 'today', label: 'Aaj' },
-  { id: 'bills', label: 'Bill' },
-  { id: 'galla', label: 'Galla' },
+  { id: 'today', label: tr('Aaj') },
+  { id: 'bills', label: tr('Bill') },
+  { id: 'galla', label: tr('Galla') },
 ]
 
 const SPLIT = [
-  { key: 'cash', label: 'Cash', color: '#0E1B33' },
-  { key: 'upi', label: 'Paytm / UPI', color: '#00B9F5' },
-  { key: 'khata', label: 'Khata', color: '#FF8A1F' },
-  { key: 'postpaid', label: 'Postpaid', color: '#8A97AB' },
-  { key: 'card', label: 'Card', color: '#B8C2D0' },
+  { key: 'cash', label: tr('Cash'), color: '#0E1B33' },
+  { key: 'upi', label: tr('Paytm / UPI'), color: '#00B9F5' },
+  { key: 'khata', label: tr('Khata'), color: '#FF8A1F' },
+  { key: 'postpaid', label: tr('Postpaid'), color: '#8A97AB' },
+  { key: 'card', label: tr('Card'), color: '#B8C2D0' },
 ]
 
 function Line({ label, value, sub }) {
@@ -50,11 +51,11 @@ function Today() {
 
   return (
     <div className="space-y-5">
-      <Hero value={inr(d.today.sales)} sub={`${d.today.invoices} bill, margin ${inr(d.margin.margin, 0)}`} />
+      <Hero value={inr(d.today.sales)} sub={tr('{n} bill, margin {m}', { n: d.today.invoices, m: inr(d.margin.margin, 0) })} />
 
       <div>
         <HourlyChart data={d.hourly} />
-        <div className="text-sm text-ink-3 mt-1">Kal {inr(d.yesterday.sales)}</div>
+        <div className="text-sm text-ink-3 mt-1">{tr('Kal {amt}', { amt: inr(d.yesterday.sales) })}</div>
       </div>
 
       {split.length > 0 && (
@@ -71,20 +72,20 @@ function Today() {
       )}
 
       <div>
-        <div className="font-hindi text-lg font-semibold mb-1">Sabse zyada bika</div>
+        <div className="font-hindi text-lg font-semibold mb-1">{tr('Sabse zyada bika')}</div>
         <Rows>
-          {d.top_items.map((t) => <Line key={t.product_id} label={`${t.name}, ${num(t.qty)} ${t.unit}`} value={inr(t.amount)} />)}
+          {d.top_items.map((t) => <Line key={t.product_id} label={`${t.name}, ${qtyLabel(t.qty, t.unit)}`} value={inr(t.amount)} />)}
         </Rows>
       </div>
 
       <div>
-        <div className="font-hindi text-lg font-semibold mb-1">Pichhle 14 din</div>
+        <div className="font-hindi text-lg font-semibold mb-1">{tr('Pichhle 14 din')}</div>
         <SeriesChart data={d.series} />
       </div>
 
       <Rows>
-        <Line label="Udhaar baaki" value={inr(d.udhaar.total_outstanding)} />
-        <Line label="Stock ki value" value={inr(d.total_stock_value)} />
+        <Line label={tr('Udhaar baaki')} value={inr(d.udhaar.total_outstanding)} />
+        <Line label={tr('Stock ki value')} value={inr(d.total_stock_value)} />
       </Rows>
     </div>
   )

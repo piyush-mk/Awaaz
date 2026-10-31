@@ -6,6 +6,7 @@ import useLoad from '../../../lib/useLoad'
 import { previewReminders, sendReminders } from '../../../api/client'
 import { useApp } from '../AppContext'
 import { inr } from '../../../lib/format'
+import { tr } from '../../../lib/i18n'
 
 /** Salary-day reminder preview and send (WhatsApp). */
 export default function RemindersSheet({ open, onClose }) {
@@ -19,7 +20,7 @@ export default function RemindersSheet({ open, onClose }) {
     try {
       const res = await sendReminders({})
       setSent(res)
-      showToast(`${res.sent.length} reminder bhej diye`)
+      showToast(tr('{n} reminder bheje', { n: res.sent.length }))
     } catch (e) {
       showError(e)
     } finally {
@@ -32,7 +33,7 @@ export default function RemindersSheet({ open, onClose }) {
   }
 
   return (
-    <Sheet open={open} onClose={close} title="Reminder">
+    <Sheet open={open} onClose={close} title={tr('Reminder')}>
       {loading && <SkeletonList rows={3} />}
       <ErrorBox error={error} onRetry={reload} />
       {data && !sent && (
@@ -46,11 +47,11 @@ export default function RemindersSheet({ open, onClose }) {
             ))}
           </ul>
           <ConfirmCard
-            question={`${data.count} logon ko bhejun? ${inr(data.total_due)}`}
+            question={tr('{n} logon ko bhejun? {amt}', { n: data.count, amt: inr(data.total_due) })}
             busy={busy || data.count === 0}
             onYes={send}
             onNo={close}
-            yesLabel="Haan"
+            yesLabel={tr('Haan')}
             tone="orange"
           />
         </div>
@@ -58,7 +59,7 @@ export default function RemindersSheet({ open, onClose }) {
       {sent && (
         <div className="space-y-3 text-center">
           <Send size={36} className="mx-auto text-paytm-blue" />
-          <div className="font-hindi text-2xl font-bold">{sent.sent.length} reminder bheje</div>
+          <div className="font-hindi text-2xl font-bold">{tr('{n} reminder bheje', { n: sent.sent.length })}</div>
         </div>
       )}
     </Sheet>

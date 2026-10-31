@@ -13,6 +13,7 @@ import SourceChip from '../../components/app/SourceChip'
 import { Btn } from '../../components/app/ui'
 import { speak, stopSpeaking } from '../../lib/audio'
 import { inr } from '../../lib/format'
+import { nameOf } from '../../lib/i18n'
 import {
   addCartLines,
   addUsualToCart,
@@ -28,6 +29,7 @@ import {
   setCartLineQty,
   addMissedSale,
 } from '../../api/client'
+import { tr } from '../../lib/i18n'
 
 export default function Counter() {
   const { sessionId, showToast, showError } = useApp()
@@ -213,7 +215,7 @@ export default function Counter() {
     if (res.cart) applyCart(res.cart)
     else refreshCart()
     processActions(res.actions)
-    if (res.missed?.length) showToast(`${res.missed.join(', ')} note kiya`, 'warning')
+    if (res.missed?.length) showToast(tr('{names} note kiya', { names: res.missed.join(', ') }), 'warning')
     if (!res.actions?.some((a) => a.status === 'confirmed' && a.result?.order_id)) say(res)
   })
 
@@ -231,7 +233,7 @@ export default function Counter() {
 
   const toggleHandsFree = async () => {
     if (rec.handsFree) await rec.stopHandsFree()
-    else if (!(await rec.startHandsFree())) showToast('Microphone chalu nahi hua', 'error')
+    else if (!(await rec.startHandsFree())) showToast(tr('Microphone chalu nahi hua'), 'error')
   }
 
   // ----- cart edits ---------------------------------------------------------------------------------------
@@ -257,7 +259,7 @@ export default function Counter() {
       const res = await attachCartCustomer(sessionId, { customer_id: c.id })
       applyCart(res.cart)
       setUsual(res.usual && res.usual.lines?.length ? res.usual : null)
-      showToast(`${c.name} chuna gaya`)
+      showToast(tr('{name} chuna gaya', { name: c.name }))
     } catch (e) {
       showError(e)
     }
@@ -292,7 +294,7 @@ export default function Counter() {
   const noteMissed = async (name) => {
     try {
       const r = await addMissedSale(name)
-      showToast(`${name}: ${r.asked_this_week} baar maanga gaya`)
+      showToast(tr('{name}: {n} baar maanga gaya', { name, n: r.asked_this_week }))
       setParchi((p) => (p ? { ...p, unmatched: p.unmatched.filter((u) => u.name !== name) } : p))
     } catch (e) {
       showError(e)
@@ -321,30 +323,30 @@ export default function Counter() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCustomerOpen(true)}
-              aria-label="Customer"
+              aria-label={tr('Customer')}
               className="flex-1 min-h-[44px] min-w-0 px-2 rounded-xl flex items-center justify-center gap-1.5 bg-white text-sm font-semibold"
             >
               <UserRound size={18} className="flex-shrink-0" />
-              <span className="truncate">{customer ? customer.name : 'Customer'}</span>
+              <span className="truncate">{customer ? nameOf(customer) : tr('Customer')}</span>
             </button>
-            <div className="flex-1 min-w-0"><PhotoButton icon={ScanLine} variant="outline" busy={parchiBusy} label="Parchi" onFiles={doParchi} className="w-full !min-h-[44px] !px-2 !gap-1.5 text-sm" /></div>
+            <div className="flex-1 min-w-0"><PhotoButton icon={ScanLine} variant="outline" busy={parchiBusy} label={tr('Parchi')} onFiles={doParchi} className="w-full !min-h-[44px] !px-2 !gap-1.5 text-sm" /></div>
             <button
               onClick={toggleHandsFree}
               disabled={!rec.supported}
               aria-pressed={rec.handsFree}
-              aria-label="Sun raha hai"
+              aria-label={tr('Sun raha hai')}
               className={`flex-1 min-h-[44px] min-w-0 px-2 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold whitespace-nowrap disabled:opacity-40 ${rec.handsFree ? 'bg-ink text-white' : 'bg-white'}`}
             >
               <Ear size={18} className={`flex-shrink-0 ${rec.handsFree ? 'text-paytm-blue' : ''}`} />
-              {rec.handsFree ? 'Sun raha' : 'Sunta rahe'}
+              {rec.handsFree ? tr('Sun raha') : tr('Sunta rahe')}
             </button>
           </div>
         )}
 
         {usual && stage === 'cart' && (
           <div className="bg-white rounded-2xl p-3 flex items-center gap-3">
-            <div className="min-w-0 flex-1 font-hindi text-lg font-semibold truncate">{usual.customer?.name || customer?.name} ka usual? {inr(usual.total)}</div>
-            <Btn size="sm" variant="navy" onClick={addUsual}>Haan</Btn>
+            <div className="min-w-0 flex-1 font-hindi text-lg font-semibold truncate">{tr('{name} ka usual? {total}', { name: usual.customer?.name || customer?.name, total: inr(usual.total) })}</div>
+            <Btn size="sm" variant="navy" onClick={addUsual}>{tr('Haan')}</Btn>
           </div>
         )}
 
@@ -359,7 +361,7 @@ export default function Counter() {
           <div className="flex flex-wrap gap-2">
             {parchi.unmatched.map((u) => (
               <button key={u.name} onClick={() => noteMissed(u.name)} className="min-h-[44px] px-3 rounded-full bg-orange-50 text-sm font-semibold text-orange-900">
-                {u.name} nahi hai
+                {tr('{name} nahi hai', { name: u.name })}
               </button>
             ))}
           </div>
@@ -375,7 +377,7 @@ export default function Counter() {
               if (kind === 'confirm') {
                 if (res.result?.order_id) showCheckout(res.result)
                 else {
-                  showToast(res.spoken_text || 'Ho gaya')
+                  showToast(tr('Ho gaya'))
                   if (res.spoken_text) say(res)
                   refreshCart()
                 }
@@ -389,9 +391,9 @@ export default function Counter() {
             <CartPanel cart={cart} onQty={changeQty} onRemove={removeLine} disabled={busy} />
             {isEmpty && !last && !pending.length && (
               <div className="pt-16 text-center">
-                <div className="font-hindi text-3xl font-semibold text-ink leading-tight">Boliye, kya dena hai?</div>
+                <div className="font-hindi text-3xl font-semibold text-ink leading-tight">{tr('Boliye, kya dena hai?')}</div>
                 <button onClick={() => voiceSubmit({ text: room.examples[0] })} className="mt-3 min-h-[44px] px-2 font-hindi text-base italic text-ink-3">
-                  &ldquo;{room.hint}&rdquo;
+                  &ldquo;{tr(room.hint)}&rdquo;
                 </button>
               </div>
             )}
@@ -405,7 +407,7 @@ export default function Counter() {
       {stage === 'cart' && !isEmpty && (
         <div className="sticky bottom-0 z-10 px-4 pt-3 pb-11 bg-bg-app">
           <button onClick={() => setPayOpen(true)} className="w-full min-h-[56px] rounded-xl bg-ink text-white px-5 flex items-center justify-between text-lg font-semibold active:bg-ink-2">
-            <span>Bill banao</span>
+            <span>{tr('Bill banao')}</span>
             <span className="tabular">{inr(cart.total)}</span>
           </button>
         </div>

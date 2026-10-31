@@ -1,5 +1,6 @@
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { inr } from '../../../lib/format'
+import { tr } from '../../../lib/i18n'
 
 const AXIS = { fontSize: 11, fill: '#46546B' }
 
@@ -15,7 +16,7 @@ export function HourlyChart({ data }) {
           <YAxis hide domain={[0, 'dataMax']} />
           <Tooltip
             cursor={{ fill: 'rgba(14,27,51,0.06)' }}
-            formatter={(v) => [inr(v), 'Sale']}
+            formatter={(v) => [inr(v), tr('Sale')]}
             labelFormatter={(h) => `${h}:00`}
             contentStyle={{ borderRadius: 12, border: '1px solid #DDE3EA', fontSize: 12 }}
           />
@@ -42,7 +43,7 @@ export function SeriesChart({ data }) {
           <YAxis hide domain={[0, 'dataMax']} />
           <Tooltip
             cursor={{ fill: 'rgba(14,27,51,0.06)' }}
-            formatter={(v, _n, p) => [inr(v), p.payload.partial ? 'Aaj (abhi tak)' : 'Sale']}
+            formatter={(v, _n, p) => [inr(v), p.payload.partial ? tr('Aaj (abhi tak)') : tr('Sale')]}
             labelFormatter={(_l, p) => p?.[0]?.payload?.date || ''}
             contentStyle={{ borderRadius: 12, border: '1px solid #DDE3EA', fontSize: 12 }}
           />

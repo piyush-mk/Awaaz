@@ -9,6 +9,20 @@ Test on the deployed HTTPS site with a real phone. Microphone and camera do not 
 
 "Live" below means the other screen changes within about 2 seconds, with no refresh.
 
+## 0. Language and Sarvam
+
+| # | Do | Expect |
+|---|---|---|
+| 0a | Open a new phone or private window | App starts in Hindi |
+| 0b | Three-dot menu, tap English | Whole merchant app switches at once. Room names become Counter, Stock, Credit, Accounts, Advice |
+| 0c | Reload, then switch back to हिंदी | Choice is remembered on that phone; numbers and bills are untouched |
+| 0d | Walk every room in English | No Hinglish in buttons, tabs or labels. Spoken replies, written answers, the brief and bill warnings are still Hinglish |
+| 0e | Walk every room in Hindi | Full Devanagari. Some demo names stay English (Khan sahab, Bread) because the data has no Hindi name |
+| 0f | `/status` | Sarvam live, models show `saaras:v4` and `bulbul:v4-flash` |
+| 0g | Listen to any spoken reply | New voice is clear and says rupee amounts naturally. Tell me if you prefer another voice |
+
+The steps below use the Hindi-mode Hinglish names from earlier builds; in English mode the same buttons read Make bill, Yes, Got paid and so on.
+
 ## 1. Counter
 
 | # | Do | Expect |

@@ -8,6 +8,7 @@ import { useApp } from '../AppContext'
 import { cancelPurchase, confirmPurchase, scanPurchase } from '../../../api/client'
 import { speak } from '../../../lib/audio'
 import { inr, num } from '../../../lib/format'
+import { tr } from '../../../lib/i18n'
 
 export default function BillScanTab() {
   const { showError, showToast } = useApp()
@@ -65,7 +66,7 @@ export default function BillScanTab() {
   const cancel = async () => {
     try {
       await cancelPurchase(bill.action_id)
-      showToast('Bill chhod diya', 'warning')
+      showToast(tr('Bill chhod diya'), 'warning')
     } catch (e) {
       showError(e)
     }
@@ -75,18 +76,17 @@ export default function BillScanTab() {
   if (done) {
     return (
       <Card className="text-center">
-        <div className="font-hindi text-2xl font-bold">Stock jud gaya</div>
+        <div className="font-hindi text-2xl font-bold">{tr('Stock jud gaya')}</div>
         <div className="text-ink-3">{done.supplier}, {done.bill_no}, {inr(done.total)}</div>
         <ul className="mt-3 text-left space-y-1">
           {done.stock_updates.map((u) => (
             <li key={u.product_id} className="flex justify-between text-sm">
               <span className="font-semibold">{u.name}</span>
-              <span className="tabular text-ink-3">{num(u.old_stock)} se <b className="text-ink">{num(u.new_stock)}</b> (+{num(u.added)})</span>
+              <span className="tabular text-ink-3">{num(u.old_stock)} &rarr; <b className="text-ink">{num(u.new_stock)}</b></span>
             </li>
           ))}
         </ul>
-        {done.new_products?.length > 0 && <div className="mt-2 text-sm text-ink-3">Naye item: {done.new_products.map((p) => p.name).join(', ')}</div>}
-        <Btn className="w-full mt-4" variant="navy" onClick={reset}>Doosra bill</Btn>
+                <Btn className="w-full mt-4" variant="navy" onClick={reset}>{tr('Doosra bill')}</Btn>
       </Card>
     )
   }
@@ -95,7 +95,7 @@ export default function BillScanTab() {
     return (
       <div className="space-y-3">
         <div className="pt-16 flex justify-center">
-          <PhotoButton variant="blue" busy={busy} label="Bill ki photo" onFiles={scan} className="min-h-[64px] !px-8 text-lg" />
+          <PhotoButton variant="blue" busy={busy} label={tr('Bill ki photo')} onFiles={scan} className="min-h-[64px] !px-8 text-lg" />
         </div>
       </div>
     )
@@ -103,8 +103,8 @@ export default function BillScanTab() {
 
   if (!bill.lines?.length) {
     return (
-      <Empty icon={FileText} hi="Bill padh nahi paya">
-        <PhotoButton variant="blue" busy={busy} label="Doosri photo" onFiles={scan} />
+      <Empty icon={FileText} hi={tr('Bill padh nahi paya')}>
+        <PhotoButton variant="blue" busy={busy} label={tr('Doosri photo')} onFiles={scan} />
       </Empty>
     )
   }
@@ -122,10 +122,10 @@ export default function BillScanTab() {
           <SourceChip source={bill.source} latency={bill.latency_ms} demo={bill.demo_mode} />
         </div>
         <div className="mt-2 flex items-baseline justify-between">
-          <span className="text-ink-3 text-sm">{bill.summary?.lines} item</span>
+          <span className="text-ink-3 text-sm">{bill.summary?.lines}</span>
           <span className="text-2xl font-bold tabular">{inr(bill.total)}</span>
         </div>
-        {bill.duplicate?.is_duplicate && <Chip tone="red" className="mt-2">Yeh bill pehle darj ho chuka hai</Chip>}
+        {bill.duplicate?.is_duplicate && <Chip tone="red" className="mt-2">{tr('Yeh bill pehle darj ho chuka hai')}</Chip>}
       </Card>
 
       <ul className="space-y-2">
@@ -145,21 +145,21 @@ export default function BillScanTab() {
                 </div>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {l.is_new_candidate && <Chip tone="blue">naya</Chip>}
+                {l.is_new_candidate && <Chip tone="blue">{tr('naya')}</Chip>}
                 {l.rate_delta > 0 && <Chip tone="red">+{inr(l.rate_delta)}</Chip>}
-                {l.free_qty_expected > (free[l.index] ?? l.free_qty_received) && <Chip tone="orange">{l.free_qty_expected} free nahi mila</Chip>}
-                {l.flags?.some((f) => f.code === 'expiry_soon') && <Chip tone="yellow">{l.days_to_expiry} din expiry</Chip>}
-                {l.flags?.some((f) => f.code === 'low_margin') && <Chip tone="yellow">kam margin</Chip>}
+                {l.free_qty_expected > (free[l.index] ?? l.free_qty_received) && <Chip tone="orange">{tr('{n} free nahi mila', { n: l.free_qty_expected })}</Chip>}
+                {l.flags?.some((f) => f.code === 'expiry_soon') && <Chip tone="yellow">{tr('{n} din expiry', { n: l.days_to_expiry })}</Chip>}
+                {l.flags?.some((f) => f.code === 'low_margin') && <Chip tone="yellow">{tr('kam margin')}</Chip>}
               </div>
               <div className="mt-2 flex items-center justify-between gap-2">
                 <Stepper value={q} step={l.unit === 'kg' ? 0.5 : 1} onChange={(v) => setQty((s) => ({ ...s, [l.index]: v }))} />
-                <button onClick={() => setSkip((s) => ({ ...s, [l.index]: !s[l.index] }))} aria-label={skipped ? 'Wapas jodein' : 'Hatayein'} className="w-11 h-11 flex items-center justify-center text-ink-3">
+                <button onClick={() => setSkip((s) => ({ ...s, [l.index]: !s[l.index] }))} aria-label={skipped ? tr('Wapas jodein') : tr('Hatayein')} className="w-11 h-11 flex items-center justify-center text-ink-3">
                   {skipped ? <RotateCcw size={20} /> : <Trash2 size={20} />}
                 </button>
               </div>
               {l.free_qty_expected > 0 && (
                 <div className="mt-1 flex items-center justify-between gap-2 text-sm font-medium">
-                  Free mila
+                  {tr('Free mila')}
                   <Stepper value={free[l.index] ?? l.free_qty_received} onChange={(v) => setFree((s) => ({ ...s, [l.index]: v }))} />
                 </div>
               )}
@@ -169,11 +169,11 @@ export default function BillScanTab() {
       </ul>
 
       <ConfirmCard
-        question={`Stock mein jodun? ${inr(bill.total)}`}
+        question={tr('Stock mein jodun? {amt}', { amt: inr(bill.total) })}
         busy={confirming}
         onYes={confirm}
         onNo={cancel}
-        yesLabel="Haan, jodo"
+        yesLabel={tr('Haan')}
         tone="orange"
       />
     </div>

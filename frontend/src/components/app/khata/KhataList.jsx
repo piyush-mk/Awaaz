@@ -9,18 +9,20 @@ import useLoad from '../../../lib/useLoad'
 import { useApp, useStoreEvent } from '../AppContext'
 import { importKhataPhoto, listKhataCustomers } from '../../../api/client'
 import { inr } from '../../../lib/format'
+import { nameOf } from '../../../lib/i18n'
+import { tr } from '../../../lib/i18n'
 
 const SORTS = [
-  { id: 'balance', label: 'Zyada baaki' },
-  { id: 'risk', label: 'Late' },
-  { id: 'recent', label: 'Naya' },
+  { id: 'balance', label: tr('Zyada baaki') },
+  { id: 'risk', label: tr('Late') },
+  { id: 'recent', label: tr('Naya') },
 ]
 
 /** Only a problem gets a second line. */
 export function statusOf(c) {
-  if (c.disputed_entries > 0) return { text: 'Entry galat bataya', cls: 'text-red-700' }
-  if (c.balance > c.credit_limit) return { text: `Limit ${inr(c.credit_limit)} se upar`, cls: 'text-red-700' }
-  if (c.late_payments > 0) return { text: `${c.late_payments} baar late`, cls: 'text-orange-800' }
+  if (c.disputed_entries > 0) return { text: tr('Entry galat bataya'), cls: 'text-red-700' }
+  if (c.balance > c.credit_limit) return { text: tr('Limit {amt} se upar', { amt: inr(c.credit_limit) }), cls: 'text-red-700' }
+  if (c.late_payments > 0) return { text: tr('{n} baar late', { n: c.late_payments }), cls: 'text-orange-800' }
   return null
 }
 
@@ -34,7 +36,7 @@ export default function KhataList() {
   const { data, loading, error, reload } = useLoad(() => listKhataCustomers({ sort }), [sort])
 
   useStoreEvent('khata_disputed', (d) => {
-    showToast(`${d.customer} ne ek entry galat bataya`, 'warning')
+    showToast(tr('{name} ne ek entry galat bataya', { name: d.customer }), 'warning')
     reload({ quiet: true })
   })
   const refresh = () => reload({ quiet: true })
@@ -64,21 +66,21 @@ export default function KhataList() {
   return (
     <div className="px-4 pt-1 pb-16 space-y-2">
       <div className="flex items-start justify-between gap-2">
-        {data ? <Hero value={inr(total)} sub={`${owing} customer`} /> : <Skeleton className="h-16 w-40" />}
+        {data ? <Hero value={inr(total)} sub={tr('{n} customer', { n: owing })} /> : <Skeleton className="h-16 w-40" />}
         <div className="flex gap-2 flex-shrink-0">
-          <PhotoButton compact variant="outline" icon={Camera} label="Notebook" busy={importing} onFiles={importPhoto} className="!bg-bg-app" />
-          <button onClick={() => setRemindOpen(true)} aria-label="Reminder" className="w-12 h-12 rounded-xl bg-bg-app flex items-center justify-center"><BellRing size={20} /></button>
+          <PhotoButton compact variant="outline" icon={Camera} label={tr('Notebook')} busy={importing} onFiles={importPhoto} className="!bg-bg-app" />
+          <button onClick={() => setRemindOpen(true)} aria-label={tr('Reminder')} className="w-12 h-12 rounded-xl bg-bg-app flex items-center justify-center"><BellRing size={20} /></button>
         </div>
       </div>
 
       <div className="flex items-center gap-2 min-h-[48px]">
         {!q && <div className="flex-1 min-w-0"><Filters items={SORTS} value={sort} onChange={setSort} /></div>}
-        <SearchToggle value={q} onChange={setQ} placeholder="Naam dhundhein" />
+        <SearchToggle value={q} onChange={setQ} placeholder={tr('Naam dhundhein')} />
       </div>
 
       {loading && !data && <SkeletonList rows={5} className="h-14" />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && rows.length === 0 && <Empty icon={Users} hi="Koi customer nahi" />}
+      {data && rows.length === 0 && <Empty icon={Users} hi={tr('Koi customer nahi')} />}
       {rows.length > 0 && (
         <Rows>
           {rows.map((c) => {
@@ -87,10 +89,10 @@ export default function KhataList() {
               <li key={c.id}>
                 <Link to={`/app/khata/${c.id}`} className="min-h-[60px] px-4 py-2 flex items-center gap-3 active:bg-bg-app">
                   <div className="min-w-0 flex-1">
-                    <div className="font-hindi text-lg font-semibold leading-tight truncate">{c.name}</div>
+                    <div className="font-hindi text-lg font-semibold leading-tight truncate">{nameOf(c)}</div>
                     {st && <div className={`text-sm font-medium mt-0.5 truncate ${st.cls}`}>{st.text}</div>}
                   </div>
-                  <div className={`text-lg font-semibold tabular ${c.balance > 0 ? 'text-ink' : 'text-green-700'}`}>{c.balance > 0 ? inr(c.balance) : 'saaf'}</div>
+                  <div className={`text-lg font-semibold tabular ${c.balance > 0 ? 'text-ink' : 'text-green-700'}`}>{c.balance > 0 ? inr(c.balance) : tr('saaf')}</div>
                   <ChevronRight size={18} className="text-ink-3 flex-shrink-0" />
                 </Link>
               </li>
@@ -104,7 +106,7 @@ export default function KhataList() {
         onClose={() => setProposal(null)}
         onDone={(res) => {
           setProposal(null)
-          showToast(`${res.total_imported ? inr(res.total_imported) : ''} khate mein jud gaye`)
+          showToast(tr('{amt} khate mein jud gaye', { amt: res.total_imported ? inr(res.total_imported) : '' }))
           reload({ quiet: true })
         }}
       />

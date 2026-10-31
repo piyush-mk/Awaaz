@@ -8,6 +8,8 @@ import { useApp } from '../AppContext'
 import { cancelShelfAudit, confirmShelfAudit, shelfAudit } from '../../../api/client'
 import { speak } from '../../../lib/audio'
 import { inr, num } from '../../../lib/format'
+import { nameOf } from '../../../lib/i18n'
+import { tr } from '../../../lib/i18n'
 
 /** Shelf photos -> expected (book) vs counted, loss value, then adjust stock. */
 export default function ShelfTab() {
@@ -63,7 +65,7 @@ export default function ShelfTab() {
   const cancel = async () => {
     try {
       await cancelShelfAudit(audit.action_id)
-      showToast('Audit chhod diya', 'warning')
+      showToast(tr('Audit chhod diya'), 'warning')
     } catch (e) {
       showError(e)
     }
@@ -75,7 +77,7 @@ export default function ShelfTab() {
       <Card className="text-center">
         <div className="font-hindi text-2xl font-bold">{done.message_hi}</div>
         <div className="text-ink-3 mt-1">Kul fark {inr(done.total_adjustment_value)}</div>
-        <Btn className="w-full mt-4" variant="navy" onClick={reset}>Naya audit</Btn>
+        <Btn className="w-full mt-4" variant="navy" onClick={reset}>{tr('Naya audit')}</Btn>
       </Card>
     )
   }
@@ -83,15 +85,15 @@ export default function ShelfTab() {
   if (!audit) {
     return (
       <div className="pt-16 flex justify-center">
-        <PhotoButton variant="blue" multiple busy={busy} label="Shelf ki photo" onFiles={run} className="min-h-[64px] !px-8 text-lg" />
+        <PhotoButton variant="blue" multiple busy={busy} label={tr('Shelf ki photo')} onFiles={run} className="min-h-[64px] !px-8 text-lg" />
       </div>
     )
   }
 
   if (!rows.length) {
     return (
-      <Empty icon={Camera} hi="Gin nahi paya">
-        <PhotoButton variant="blue" multiple busy={busy} label="Doosri photo" onFiles={run} />
+      <Empty icon={Camera} hi={tr('Gin nahi paya')}>
+        <PhotoButton variant="blue" multiple busy={busy} label={tr('Doosri photo')} onFiles={run} />
       </Empty>
     )
   }
@@ -101,7 +103,7 @@ export default function ShelfTab() {
       <Card>
         <div className="flex items-start gap-2">
           <div className="flex-1">
-            <div className="text-sm text-ink-3">Nuksaan (cost par)</div>
+            <div className="text-sm text-ink-3">{tr('Nuksaan (cost par)')}</div>
             <div className={`text-3xl font-bold tabular ${loss < 0 ? 'text-stock-red' : 'text-ink'}`}>{inr(Math.abs(loss))}</div>
           </div>
           <SourceChip source={audit.source} latency={audit.latency_ms} demo={audit.demo_mode} />
@@ -110,12 +112,12 @@ export default function ShelfTab() {
 
       <div className="overflow-hidden">
         <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-3 py-2 text-xs font-medium text-ink-3">
-          <span></span><span className="text-right">Book</span><span className="text-right">Mila</span><span className="text-right">Fark</span>
+          <span></span><span className="text-right">{tr('Book')}</span><span className="text-right">{tr('Mila')}</span><span className="text-right">{tr('Fark')}</span>
         </div>
         {rows.map((r) => (
           <div key={r.product_id} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 items-center px-3 py-2 border-t border-line">
             <div className="min-w-0">
-              <div className="font-hindi text-base font-bold truncate">{r.name_hi || r.name}</div>
+              <div className="font-hindi text-base font-bold truncate">{nameOf(r)}</div>
             </div>
             <div className="text-right tabular">{num(r.expected)}</div>
             <input
@@ -132,11 +134,11 @@ export default function ShelfTab() {
       </div>
 
       <ConfirmCard
-        question="Stock sahi karun?"
+        question={tr('Stock sahi karun?')}
         busy={confirming}
         onYes={confirm}
         onNo={cancel}
-        yesLabel="Haan"
+        yesLabel={tr('Haan')}
         tone="orange"
       />
     </div>

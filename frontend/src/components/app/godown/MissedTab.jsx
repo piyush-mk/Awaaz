@@ -4,6 +4,7 @@ import { Btn, Empty, ErrorBox, Rows, SkeletonList, inputCls } from '../ui'
 import { useApp, useStoreEvent } from '../AppContext'
 import useLoad from '../../../lib/useLoad'
 import { addMissedSale, getMissedSales } from '../../../api/client'
+import { tr } from '../../../lib/i18n'
 
 /** What customers asked for and the shop did not have. */
 export default function MissedTab() {
@@ -19,7 +20,7 @@ export default function MissedTab() {
     setBusy(true)
     try {
       await addMissedSale(name.trim())
-      showToast('Note ho gaya')
+      showToast(tr('Note ho gaya'))
       setName('')
       reload({ quiet: true })
     } catch (err) {
@@ -32,18 +33,18 @@ export default function MissedTab() {
   return (
     <div className="space-y-3">
       <form onSubmit={add} className="flex gap-2">
-        <input className={inputCls} aria-label="Kya nahi mila" placeholder="Kya nahi mila? jaise kurkure" value={name} onChange={(e) => setName(e.target.value)} />
-        <Btn type="submit" busy={busy} disabled={!name.trim()} icon={Plus} variant="navy" aria-label="Note" className="flex-shrink-0 !px-3" />
+        <input className={inputCls} aria-label={tr('Kya nahi mila')} placeholder={tr('Kya nahi mila? jaise kurkure')} value={name} onChange={(e) => setName(e.target.value)} />
+        <Btn type="submit" busy={busy} disabled={!name.trim()} icon={Plus} variant="navy" aria-label={tr('Note')} className="flex-shrink-0 !px-3" />
       </form>
       {loading && !data && <SkeletonList rows={3} />}
       <ErrorBox error={error} onRetry={reload} />
-      {data && data.items.length === 0 && <Empty icon={SearchX} hi="Is hafte kuch nahi" />}
+      {data && data.items.length === 0 && <Empty icon={SearchX} hi={tr('Is hafte kuch nahi')} />}
       {data?.items.length > 0 && (
         <Rows>
           {data.items.map((r) => (
             <li key={r.product_name} className="min-h-[56px] px-4 py-2 flex items-center justify-between gap-3">
               <span className="font-hindi text-lg font-semibold truncate">{r.product_name}</span>
-              <span className="text-[15px] text-ink-3 tabular whitespace-nowrap">{r.count} baar</span>
+              <span className="text-[15px] text-ink-3 tabular whitespace-nowrap">{tr('{n} baar', { n: r.count })}</span>
             </li>
           ))}
         </Rows>

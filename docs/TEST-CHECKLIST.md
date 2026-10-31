@@ -19,6 +19,11 @@ Test on the deployed HTTPS site with a real phone. Microphone and camera do not 
 | 0d | Walk every room in English | No Hinglish in buttons, tabs or labels. Spoken replies, written answers, the brief and bill warnings are still Hinglish |
 | 0e | Walk every room in Hindi | Full Devanagari. Some demo names stay English (Khan sahab, Bread) because the data has no Hindi name |
 | 0f | `/status` | Sarvam live, models show `saaras:v4` and `bulbul:v4-flash` |
+| 0h | Release the mic after an order | A short "ji" plays at once, then the reply. Nothing overlaps. Bill appears in about a second |
+| 0i | Press the mic while a reply is playing | The reply fades out. A payment announcement is never cut |
+| 0j | Hands-free: time how long a pause takes to become a bill | A second or two after you stop. One test run was slow (10 s), so check this on a real phone |
+| 0k | Say a plain order, then one with udhaar | Plain is near instant; udhaar takes a little longer because the AI double-checks it. Both are correct |
+| 0l | If `OPENROUTER_API_KEY` is set, check `/status` | OpenRouter cards show live and the credit left. To test the backup, ask Sarvam to fail by using a wrong key on a test server only |
 | 0g | Listen to any spoken reply | New voice is clear and says rupee amounts naturally. Tell me if you prefer another voice |
 
 Button names below are written in Latin letters. Bill banao is बिल बनाओ in Hindi and Make bill in English; Haan is हां and Yes; Paisa mila is पैसा मिला and Got paid. Phrases in quotes are what you say aloud, in either language.

@@ -6,14 +6,14 @@ import httpx
 import pytest
 
 from routers import admin
-from services import events, health, http, llm, sarvam, xai
+from services import events, health, http, llm, openrouter, sarvam
 from tests.test_advice_common import make_client_fixture, settings_with
 
 client = make_client_fixture()
 
-SECRETS = ["sk-SECRET-sarvam", "pk-SECRET-paytm", "xk-SECRET-xai", "wa-SECRET-token", "wa-SECRET-app"]
-KEYED = dict(sarvam_api_key=SECRETS[0], paytm_api_key=SECRETS[1], xai_key=SECRETS[2], wa_token=SECRETS[3],
-             wa_phone_number_id="1234567890", wa_app_secret=SECRETS[4], demo_mode="auto")
+SECRETS = ["sk-SECRET-sarvam", "or-SECRET-openrouter", "wa-SECRET-token", "wa-SECRET-app"]
+KEYED = dict(sarvam_api_key=SECRETS[0], openrouter_api_key=SECRETS[1], wa_token=SECRETS[2],
+             wa_phone_number_id="1234567890", wa_app_secret=SECRETS[3], demo_mode="auto")
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +27,7 @@ def clean(monkeypatch):
 
 def use_settings(monkeypatch, **kw):
     s = settings_with(**kw)
-    for mod in (health, admin, sarvam, llm, xai):
+    for mod in (health, admin, sarvam, llm, openrouter):
         monkeypatch.setattr(mod, "settings", s)
     return s
 
@@ -46,7 +46,7 @@ def test_health_demo_mode_on(client):
 
 
 def test_health_missing_keys_in_auto_mode(client, monkeypatch):
-    use_settings(monkeypatch, sarvam_api_key="", paytm_api_key="", xai_key="", wa_token="", demo_mode="auto")
+    use_settings(monkeypatch, sarvam_api_key="", openrouter_api_key="", wa_token="", demo_mode="auto")
     j = client.get("/api/admin/health", params={"live": 1}).json()
     assert j["pinged"] == ["db"]  # no keys: nothing external is called
     states = {n: s["state"] for n, s in j["services"].items()}
@@ -63,6 +63,8 @@ def _healthy_handler(req: httpx.Request):
         return httpx.Response(200, json={"audios": [base64.b64encode(b"mp3").decode()]})
     if path.endswith("/speech-to-text"):
         return httpx.Response(200, json={"transcript": "namaste", "language_code": "hi-IN"})
+    if path.endswith("/credits"):
+        return httpx.Response(200, json={"data": {"total_credits": 10.0, "total_usage": 3.71}})
     if "chat/completions" in path:
         return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
     if req.url.host == "graph.facebook.com":
@@ -82,15 +84,20 @@ def test_live_pings_report_live_and_never_leak(client, monkeypatch):
     r = client.get("/api/admin/health", params={"live": 1})
     j = r.json()
     assert j["status"] == "ok" and j["live_checked"] is True
-    assert set(j["pinged"]) == {"db", "sarvam_tts", "sarvam_chat", "sarvam_vision", "paytm_llm", "xai",
-                                "whatsapp", "sarvam_stt"}
-    for name in ("sarvam_stt", "sarvam_tts", "sarvam_chat", "sarvam_vision", "paytm_llm", "xai", "whatsapp"):
+    assert set(j["pinged"]) == {"db", "sarvam_tts", "sarvam_chat", "sarvam_vision", "openrouter_chat",
+                                "openrouter_vision", "whatsapp", "sarvam_stt"}
+    for name in ("sarvam_stt", "sarvam_tts", "sarvam_chat", "sarvam_vision", "openrouter_chat",
+                 "openrouter_vision", "whatsapp"):
         s = j["services"][name]
         assert s["state"] == "live" and s["last_latency_ms"] is not None and s["last_error"] is None, name
     tts = [q for q in seen if q.url.path.endswith("/text-to-speech")][0]
     assert json.loads(tts.content)["text"] == "Namaste"  # one-word TTS
     chat = [q for q in seen if q.url.path == "/v1/chat/completions" and q.url.host == "api.sarvam.ai"][0]
     assert json.loads(chat.content)["max_tokens"] == 1  # one-token chat
+    orc = [q for q in seen if q.url.host == "openrouter.ai" and q.url.path.endswith("/chat/completions")]
+    assert sorted(json.loads(q.content)["max_tokens"] for q in orc) == [1, 5]  # 1-token chat, tiny vision
+    assert j["services"]["openrouter_chat"]["credits_remaining"] == pytest.approx(6.29)
+    assert "credits_remaining" not in j["services"]["openrouter_vision"]
     for secret in SECRETS:
         assert secret not in r.text
     # without ?live=1 nothing is called, but the last results are still reported
@@ -104,13 +111,13 @@ def test_failed_pings_become_fallback_and_errors_are_scrubbed(client, monkeypatc
 
     def handler(req):
         # a hostile upstream that echoes the key back in its error body
-        return httpx.Response(401, json={"error": f"invalid key {SECRETS[0]} / {SECRETS[1]} / {SECRETS[3]}"})
+        return httpx.Response(401, json={"error": f"invalid key {SECRETS[0]} / {SECRETS[1]} / {SECRETS[2]}"})
 
     http.TRANSPORT = httpx.MockTransport(handler)
     r = client.get("/api/admin/health", params={"live": 1})
     j = r.json()
     assert j["status"] == "degraded"
-    for name in ("sarvam_tts", "sarvam_chat", "paytm_llm", "xai", "whatsapp"):
+    for name in ("sarvam_tts", "sarvam_chat", "openrouter_chat", "openrouter_vision", "whatsapp"):
         s = j["services"][name]
         assert s["state"] == "fallback" and s["effective"] in ("fixture", "simulator"), name
         assert s["last_error"] and "HTTP 401" in s["last_error"]
@@ -128,6 +135,9 @@ def test_status_page_data(client):
     assert j["counts"]["products"] == 40 and isinstance(j["counts"]["invoices_today"], int) and j["counts"]["invoices_today"] >= 0
     assert "commit" in j["build"] and j["services"]["db"]["state"] == "live"
     assert j["config"]["models"]["llm"] == "sarvam-105b"
+    assert j["config"]["openrouter_key"] is False
+    assert j["config"]["openrouter_model"] == "anthropic/claude-haiku-5.5"
+    assert j["config"]["openrouter_vision_model"] == "google/gemini-3.1-flash-lite"
     assert "api_key" not in json.dumps(j).lower().replace("sarvam_key", "")
 
 
@@ -148,6 +158,7 @@ def test_demo_checklist_passes_on_fresh_seed(client):
     assert by_id["surf_rate_42"]["actual"] == 42 and by_id["kurkure_absent"]["actual"] == 0
     assert 1.8 <= by_id["ghee_cover_2d"]["actual"] <= 2.2
     assert "sarvam_key" in j["warnings"]  # advisory only, does not block "ready"
+    assert "openrouter_key" in j["warnings"]
 
 
 def test_reset_demo_restores_seed_numbers(client):

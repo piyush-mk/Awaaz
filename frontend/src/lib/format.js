@@ -1,4 +1,4 @@
-import { lang, tr, unitOf } from './i18n'
+import { lang, tr, unitOf } from './i18n.js'
 
 // Small formatting helpers shared by the merchant app screens.
 
@@ -38,8 +38,7 @@ export function shortTime(iso) {
 
 const SOURCE_LABELS = {
   sarvam: 'Sarvam',
-  paytm: 'Paytm AI',
-  xai: 'xAI',
+  openrouter: 'OpenRouter',
   rules: 'Rules',
   fixture: 'demo data',
 }
@@ -52,6 +51,20 @@ export function sourceText(source, latencyMs, demo) {
   const ms = Number(latencyMs || 0)
   if (!ms) return label
   return ms >= 1000 ? `${label} · ${(ms / 1000).toFixed(1)} s` : `${label} · ${Math.round(ms)} ms`
+}
+
+function seconds(ms) {
+  const v = Number(ms) / 1000
+  return `${v < 0.095 ? v.toFixed(2) : v.toFixed(1)} s`
+}
+
+/** "stt 0.9 s, parse 0.02 s, total 1.1 s" from the response `timings` (any value may be null / missing). */
+export function timingsText(timings) {
+  if (!timings || typeof timings !== 'object') return ''
+  const parts = [['stt', timings.stt_ms], ['parse', timings.parse_ms], ['llm', timings.llm_ms], ['total', timings.total_ms]]
+    .filter(([, v]) => v !== null && v !== undefined && Number.isFinite(Number(v)))
+    .map(([label, v]) => `${label} ${seconds(v)}`)
+  return parts.join(', ')
 }
 
 /** Backend URLs are absolute (PUBLIC_BASE_URL). Turn them into same-origin paths so the dev proxy and the

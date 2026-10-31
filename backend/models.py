@@ -286,7 +286,7 @@ class PendingAction(Base):
     kind = Column(String, nullable=False)  # add_udhaar, restock, purchase_bill, ...
     payload = Column(JSON, default=dict)
     status = Column(String, default="proposed")  # proposed|confirmed|cancelled
-    source = Column(String, nullable=True)  # sarvam|paytm|xai|rules|fixture
+    source = Column(String, nullable=True)  # sarvam|openrouter|rules|fixture
     latency_ms = Column(Integer, nullable=True)
     session_id = Column(String, nullable=True)
     result = Column(JSON, nullable=True)

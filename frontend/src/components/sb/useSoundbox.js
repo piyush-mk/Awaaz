@@ -8,7 +8,8 @@ import { getDashboard, inr, sessionFromUrl } from '../../api/sideClient'
  *   mode: 'idle' | 'bill' | 'qr' | 'paid' | 'brief'
  *
  *   cart_updated     -> bill (live lines, weigh instruction, running total); empty cart -> idle
- *   utterance        -> "heard" bubble (transcript + reply), speaks the reply
+ *   utterance        -> "heard" bubble (transcript + reply + source/timings), speaks the reply
+ *   speech_ready     -> finishes a reply whose audio was still being generated (the speech manager keys it)
  *   action_proposed  -> confirm card (udhaar / restock ...), action_resolved clears it
  *   checkout         -> qr (exact amount, upi_string, order id); complete=true bills skip the QR
  *   payment_received -> paid (giant amount, spoken text, low-stock lines, receipt link), idle after a while
@@ -18,9 +19,15 @@ import { getDashboard, inr, sessionFromUrl } from '../../api/sideClient'
  *   postpaid_offered, postpaid_approved, galla_closed, stock_updated, khata_imported,
  *   khata_reminders_sent, demo_reset -> one-line banners (some also spoken)
  *
+ * Everything spoken goes through the one speech manager (hooks/useSpeech): queued, de-duplicated by key, so the
+ * HTTP reply, the SSE `utterance` event and `speech_ready` for one reply are spoken once.
+ *
  * The server replays up to 50 old events when a stream first connects; those are ignored
  * (a short window after the first `hello`) so the screen never replays yesterday's payment.
  */
+
+/** Only the speakable fields of an event: `text` / `answer` of other payloads must never be read aloud by accident. */
+const spokenOf = (d, spoken = d.spoken_text) => ({ spoken_text: spoken, audio_url: d.audio_url, audio_base64: d.audio_base64, speech: d.speech })
 
 const PAID_HOLD_MS = 10000
 const BRIEF_HOLD_MS = 45000
@@ -28,7 +35,7 @@ const HEARD_MS = 10000
 const BANNER_MS = 9000
 const REPLAY_WINDOW_MS = 600
 
-export default function useSoundbox({ speak, cancelSpeech }) {
+export default function useSoundbox({ speak, cancelSpeech, speechReady, hasPending }) {
   const sessionFilter = useRef(sessionFromUrl()).current
   const [mode, setModeState] = useState('idle')
   const [cart, setCart] = useState(null)
@@ -46,7 +53,7 @@ export default function useSoundbox({ speak, cancelSpeech }) {
   const seenHello = useRef(false)
   const lastCheckoutAt = useRef(0)
   const lastPaidAt = useRef(0)
-  const lastSaid = useRef({ text: '', at: 0 })
+  const cartRef = useRef(null)
   const bannerId = useRef(0)
   const speakRef = useRef(speak)
   speakRef.current = speak
@@ -76,12 +83,10 @@ export default function useSoundbox({ speak, cancelSpeech }) {
     [],
   )
 
-  const say = useCallback((text, audioUrl, opts = {}) => {
-    if (!text && !audioUrl) return
-    const now = Date.now()
-    if (text && lastSaid.current.text === text && now - lastSaid.current.at < 4000) return
-    lastSaid.current = { text, at: now }
-    speakRef.current(text, { audioUrl, ...opts })
+  /** say(text | reply | speech object, { kind, key }): the manager de-duplicates and queues. */
+  const say = useCallback((input, opts = {}) => {
+    if (!input) return
+    speakRef.current(input, opts)
   }, [])
 
   const banner = useCallback(
@@ -101,6 +106,65 @@ export default function useSoundbox({ speak, cancelSpeech }) {
   }, [])
   useEffect(refreshTally, [refreshTally])
 
+  // cart from an SSE event or straight from the HTTP reply (whichever is first; never an older one over a newer one)
+  const showCart = useCallback(
+    (c) => {
+      if (!c || c.status === 'checked_out') return
+      const cur = cartRef.current
+      if (cur && cur.updated_at && c.updated_at && c.updated_at < cur.updated_at) return
+      cartRef.current = c
+      const lines = c.lines || []
+      setCart(c)
+      const m = modeRef.current
+      if (lines.length === 0) {
+        if (m === 'bill' || m === 'qr') goIdle()
+        return
+      }
+      if (m === 'brief') return
+      clearTimeout(timers.current.idle)
+      setCheckout(null)
+      setPaid(null)
+      setMode('bill')
+    },
+    [goIdle, setMode],
+  )
+
+  // "heard" bubble + spoken reply, from the SSE `utterance` event or the HTTP reply (same payload shape)
+  const handleUtterance = useCallback(
+    (d) => {
+      if (d.transcript || d.spoken_text) {
+        setHeard((prev) => {
+          const transcript = d.transcript || ''
+          const same = prev && prev.transcript === transcript
+          return {
+            transcript,
+            reply: d.spoken_text || d.speech?.text || '',
+            source: d.source ?? (same ? prev.source : undefined),
+            latency: d.latency_ms ?? (same ? prev.latency : undefined),
+            timings: d.timings ?? (same ? prev.timings : undefined),
+            demo: d.demo_mode && d.source === 'fixture',
+          }
+        })
+        later('heard', HEARD_MS, () => setHeard(null))
+      }
+      const now = Date.now()
+      // checkout / payment announce themselves; do not read the same total twice
+      if (now - lastCheckoutAt.current < 4000 || now - lastPaidAt.current < 2000) return
+      say(spokenOf(d))
+    },
+    [later, say],
+  )
+
+  /** Call with the HTTP reply of this device's own utterance: the screen updates without waiting for SSE or speech. */
+  const applyResponse = useCallback(
+    (res) => {
+      if (!res) return
+      showCart(res.cart)
+      handleUtterance(res)
+    },
+    [handleUtterance, showCart],
+  )
+
   // wraps a handler: drops replayed history and events of other sessions
   const on = (fn) => (data) => {
     if (Date.now() < coldUntil.current) return
@@ -116,34 +180,21 @@ export default function useSoundbox({ speak, cancelSpeech }) {
       }
     },
 
-    cart_updated: on((d) => {
-      const c = d.cart
-      if (!c) return
-      if (c.status === 'checked_out') return
-      const lines = c.lines || []
-      setCart(c)
-      const m = modeRef.current
-      if (lines.length === 0) {
-        if (m === 'bill' || m === 'qr') goIdle()
-        return
-      }
-      if (m === 'brief') return
-      clearTimeout(timers.current.idle)
-      setCheckout(null)
-      setPaid(null)
-      setMode('bill')
-    }),
+    cart_updated: on((d) => showCart(d.cart)),
 
-    utterance: on((d) => {
-      if (d.transcript || d.spoken_text) {
-        setHeard({ transcript: d.transcript || '', reply: d.spoken_text || '' })
-        later('heard', HEARD_MS, () => setHeard(null))
+    utterance: on((d) => handleUtterance(d)),
+
+    // audio for a reply that was `pending`: ours, or another device's on the same counter. Replayed history is
+    // ignored unless this screen is waiting for exactly that key.
+    speech_ready: (d) => {
+      if (!d) return
+      const waiting = hasPending?.(d.key)
+      if (!waiting) {
+        if (Date.now() < coldUntil.current) return
+        if (sessionFilter && d.session_id && d.session_id !== sessionFilter) return
       }
-      const now = Date.now()
-      // checkout / payment announce themselves; do not read the same total twice
-      if (now - lastCheckoutAt.current < 4000 || now - lastPaidAt.current < 2000) return
-      say(d.spoken_text, d.audio_url)
-    }),
+      speechReady?.(d)
+    },
 
     action_proposed: on((d) => {
       if (d.action) setProposal({ ...d.action, spoken_text: d.spoken_text })
@@ -152,7 +203,7 @@ export default function useSoundbox({ speak, cancelSpeech }) {
     action_resolved: on((d) => {
       setProposal((p) => (p && p.id === d.id ? null : p))
       if (d.status === 'confirmed' && d.summary) banner(`${d.summary}: ho gaya`, 'ok')
-      say(d.spoken_text)
+      say(spokenOf(d))
     }),
 
     checkout: on((d) => {
@@ -162,7 +213,7 @@ export default function useSoundbox({ speak, cancelSpeech }) {
       clearTimeout(timers.current.idle)
       setPaid(null)
       setMode('qr')
-      say(d.spoken_text, d.audio_url, { interrupt: true })
+      say(spokenOf(d))
     }),
 
     payment_received: on((d) => {
@@ -171,7 +222,11 @@ export default function useSoundbox({ speak, cancelSpeech }) {
       setCheckout(null)
       setProposal(null)
       setMode('paid')
-      say(d.spoken_text || `${inr(d.amount)} rupaye prapt hue`, d.audio_url, { interrupt: true })
+      // money is never dropped or cut by a newer reply; one line per order even if the event is delivered twice
+      say(
+        spokenOf(d, d.spoken_text || d.speech?.text || `${inr(d.amount)} rupaye prapt hue`),
+        { kind: 'money', key: d.speech?.key ?? (d.order_id ? `pay:${d.order_id}` : undefined) },
+      )
       later('idle', PAID_HOLD_MS, goIdle)
       refreshTally()
     }),
@@ -183,7 +238,7 @@ export default function useSoundbox({ speak, cancelSpeech }) {
     brief_ready: on((d) => {
       setBrief(d)
       setMode('brief')
-      say(d.spoken_text || d.text, d.audio_url, { interrupt: true })
+      say(spokenOf(d, d.spoken_text || d.speech?.text || d.text))
       later('idle', BRIEF_HOLD_MS, goIdle)
     }),
 
@@ -245,6 +300,7 @@ export default function useSoundbox({ speak, cancelSpeech }) {
     banners,
     tally,
     goIdle,
+    applyResponse,
     dismissProposal,
     banner,
     say,

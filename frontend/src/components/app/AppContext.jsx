@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import useEvents from '../../hooks/useEvents'
 import useCounterSession from '../../hooks/useCounterSession'
 import Toast from '../Toast'
+import { getSpeechManager } from '../../lib/speechManager'
 import { getStatus } from '../../api/client'
 import { errMessage } from '../../lib/format'
 
@@ -28,6 +29,7 @@ const EVENT_TYPES = [
   'galla_closed',
   'brief_ready',
   'demo_reset',
+  'speech_ready',
 ]
 
 export function AppProvider({ children }) {
@@ -36,6 +38,9 @@ export function AppProvider({ children }) {
   const [storeName, setStoreName] = useState('Ramesh General Store')
   const [demo, setDemo] = useState(null)
   const listeners = useRef(new Map())
+  const speech = useMemo(() => getSpeechManager(), [])
+  const sessionRef = useRef(sessionId)
+  sessionRef.current = sessionId
 
   const showToast = useCallback((message, type = 'success') => setToast({ message, type, id: Date.now() }), [])
   const showError = useCallback((e) => setToast({ message: errMessage(e), type: 'error', id: Date.now() }), [])
@@ -59,6 +64,23 @@ export function AppProvider({ children }) {
   )
   const connected = useEvents('store', handlers, { skipHistory: true })
 
+  // One speech manager for the whole phone app. Phrases (instant acks) are fetched now and warmed after the
+  // first touch. `speech_ready` finishes a reply whose audio was still being generated: it is spoken when it
+  // belongs to this device's counter, has no session, or is a key this device is waiting for (other rooms
+  // use their own session ids).
+  useEffect(() => {
+    speech.init()
+    const off = subscribe('speech_ready', (d) => {
+      if (!d || d.session_id === undefined || d.session_id === null || d.session_id === '' || d.session_id === sessionRef.current || speech.hasPending(d.key)) {
+        speech.speechReady(d)
+      }
+    })
+    return () => {
+      off()
+      speech.cancel()
+    }
+  }, [speech, subscribe])
+
   useEffect(() => {
     let alive = true
     getStatus()
@@ -74,8 +96,8 @@ export function AppProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ sessionId, rotateSession: rotate, showToast, showError, subscribe, connected, storeName, demo }),
-    [sessionId, rotate, showToast, showError, subscribe, connected, storeName, demo],
+    () => ({ sessionId, rotateSession: rotate, showToast, showError, subscribe, connected, storeName, demo, speech }),
+    [sessionId, rotate, showToast, showError, subscribe, connected, storeName, demo, speech],
   )
 
   return (

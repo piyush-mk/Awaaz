@@ -341,13 +341,15 @@ def route(db: Session, question: str) -> list[tuple[str, dict]]:
 # answer
 # ---------------------------------------------------------------------------
 
-NOT_UNDERSTOOD = ("Yeh sawaal abhi samajh nahi aaya. Aap sale, stock, udhaar, expiry ya galla ke baare "
-                  "mein pooch sakte hain.")
+NOT_UNDERSTOOD = ("Ye sawaal samajh nahi aaya ji. Sale, stock, udhaar, expiry ya galla ke baare "
+                  "mein poochiye.")
 
 REPHRASE_SYSTEM = (
-    "Tum Ramesh General Store ki dukaan ke AI sahayak ho. User ke sawaal ka jawab sirf neeche diye 'results' se do, "
-    "1 se 3 chhote Hinglish (roman) vaakya mein, bolne layak. Koi number invent ya round mat karo; sirf "
-    "results ke numbers digits mein likho. Rupaye ₹ ke saath. Bullet ya table mat banao."
+    "Tum Ramesh General Store ki dukaan ke AI sahayak ho, ek garmjoshi wale quick dukaandaar ki tarah. User ke sawaal ka "
+    "jawab sirf neeche diye 'results' se do, 1 se 3 chhote Hinglish (roman) vaakya mein, bolne layak. "
+    "Ek vaakya mein ek hi baat. Zaroorat ho toh 'ji', 'dekhiye', 'achha' jaisa ek filler, zyada nahi. "
+    "Koi number invent ya round mat karo; sirf results ke numbers digits mein likho. Rupaye ₹ ke saath. "
+    "Mazaak sirf kabhi kabhi, aur paison ya galti par kabhi nahi. Bullet, table, emoji ya dash mat banao."
 )
 
 
@@ -401,10 +403,10 @@ async def ask(db: Session, question: str, today: Optional[date] = None, use_llm:
         answer = NOT_UNDERSTOOD
     else:
         answer = " ".join(r["line"] for r in results)
-        if source in ("sarvam", "paytm"):
+        if source in ("sarvam", "openrouter"):
             reworded = await _llm_rephrase(question, results)
             if reworded:
-                answer = re.sub(r"(₹\s?[\d,]+)\.0+\b", r"\1", reworded)  # the model writes ₹850.0
+                answer = re.sub(r"(\d)\.0+(?!\d)", r"\1", reworded)  # the model writes ₹850.0 and 850.0 rupaye
     return {
         "question": question, "answer": answer, "spoken_text": brief.spoken_version(answer),
         "tools": [{"name": r["name"], "args": r["args"], "data": r["data"]} for r in results],

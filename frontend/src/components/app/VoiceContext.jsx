@@ -7,7 +7,7 @@ import { Chip, Sheet, Spinner, inputCls } from './ui'
 import { useApp } from './AppContext'
 import useRecorder from '../../hooks/useRecorder'
 import { askShop, sendUtterance } from '../../api/client'
-import { speak } from '../../lib/audio'
+import { useSpeechState } from '../../hooks/useSpeech'
 import { inr } from '../../lib/format'
 import { tr } from '../../lib/i18n'
 
@@ -71,7 +71,7 @@ function AnswerTable({ table }) {
 
 /** What was heard and what happened: the answer, or Haan / Nahi cards. */
 function ResultSheet({ result, onClose, onActionDone }) {
-  const { showToast } = useApp()
+  const { showToast, speech } = useApp()
   if (!result) return null
   const { transcript, spoken, understood, tables, source, latency, demo, actions } = result
   return (
@@ -89,7 +89,7 @@ function ResultSheet({ result, onClose, onActionDone }) {
               onActionDone(action.id)
               if (kind === 'confirm') {
                 showToast(tr('Ho gaya'))
-                speak(res)
+                speech.speak(res)
               }
             }}
           />
@@ -187,7 +187,8 @@ function Listening({ rec, thinking, room, onStop, onCancel }) {
  * for Haan.
  */
 export function VoiceProvider({ children }) {
-  const { sessionId, showError, showToast } = useApp()
+  const { sessionId, showError, showToast, speech } = useApp()
+  const speechState = useSpeechState()
   const { pathname } = useLocation()
   const room = roomFor(pathname)
   const roomRef = useRef(room)
@@ -199,13 +200,15 @@ export function VoiceProvider({ children }) {
   const [typeOpen, setTypeOpen] = useState(false)
   const handler = useRef(null)
   const queue = useRef(Promise.resolve())
+  const ackRef = useRef(null) // the instant "ji" of the utterance that just stopped
 
   const setHandler = useCallback((fn) => {
     handler.current = fn
   }, [])
 
-  const askRoom = useCallback(async (job) => {
+  const askRoom = useCallback(async ({ ack, ...job }) => {
     const r = await askShop(job)
+    ack?.settle()
     setResult({
       transcript: r.transcript || r.question,
       spoken: r.answer,
@@ -215,12 +218,13 @@ export function VoiceProvider({ children }) {
       latency: r.latency_ms,
       demo: r.tts_source === 'fixture' && r.source === 'fixture',
     })
-    speak({ spoken_text: r.spoken_text || r.answer, audio_url: r.audio_url, audio_base64: r.audio_base64 })
-  }, [])
+    speech.speak({ spoken_text: r.spoken_text || r.answer, audio_url: r.audio_url, audio_base64: r.audio_base64 })
+  }, [speech])
 
   const agentRoom = useCallback(
-    async (job, context) => {
+    async ({ ack, ...job }, context) => {
       const res = await sendUtterance({ ...job, context, sessionId: `${sessionId}-${context}` })
+      ack?.settle()
       setResult({
         transcript: res.transcript,
         spoken: res.spoken_text,
@@ -229,13 +233,14 @@ export function VoiceProvider({ children }) {
         demo: res.demo_mode && res.source === 'fixture',
         actions: (res.actions || []).filter((a) => a.status === 'proposed'),
       })
-      speak(res)
+      speech.speak(res)
     },
-    [sessionId],
+    [sessionId, speech],
   )
 
   const submit = useCallback(
     (job) => {
+      if (job.text) speech.newTurn() // typed input: no ack, but the old reply stops
       queue.current = queue.current
         .then(async () => {
           setBusy(true)
@@ -244,6 +249,7 @@ export function VoiceProvider({ children }) {
             else if (roomRef.current.context === 'ask') await askRoom(job)
             else await agentRoom(job, roomRef.current.context)
           } catch (e) {
+            job.ack?.cancel()
             showError(e)
           } finally {
             setBusy(false)
@@ -252,15 +258,37 @@ export function VoiceProvider({ children }) {
         })
         .catch(() => {})
     },
-    [agentRoom, askRoom, showError],
+    [agentRoom, askRoom, showError, speech],
   )
 
   const rec = useRecorder({
+    // The moment recording stops (release, tap to send, hands-free silence cut): instant "ji", before any network.
+    onStop: () => {
+      ackRef.current = speech.ack()
+    },
     onAudio: (blob, meta) => {
+      const ack = ackRef.current && Date.now() - ackRef.current.startedAt < 8000 ? ackRef.current : null
+      ackRef.current = null
       if (meta.mode === 'ptt') setSpokenPtt(true)
-      submit({ audio: blob, filename: meta.filename })
+      submit({ audio: blob, filename: meta.filename, ack })
     },
   })
+
+  // Pressing the mic while a reply is still playing cuts it (short fade); money announcements finish.
+  useEffect(() => {
+    if (rec.recording) speech.newTurn()
+  }, [rec.recording, speech])
+
+  // Hands-free must never hear its own acks or replies: pause detection while anything plays, resume 250 ms after.
+  useEffect(() => {
+    if (speechState.speaking) {
+      rec.setSuspended(true)
+      return undefined
+    }
+    const t = setTimeout(() => rec.setSuspended(false), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speechState.speaking, rec.handsFree])
 
   useEffect(() => {
     if (rec.error) showToast(rec.error, 'error')

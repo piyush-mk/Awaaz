@@ -8,9 +8,10 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="awaaz-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.sqlite"
-for _k in ("SARVAM_API_KEY", "PAYTM_API_KEY", "PAYTM_AI_KEY", "XAI_KEY", "WA_TOKEN",
-           "WA_PHONE_NUMBER_ID", "WA_APP_SECRET"):
-    os.environ[_k] = ""
+os.environ["CACHE_DIR"] = f"{_TMP}/cache"  # audio cached by a real run must not change test results
+for _k in ("SARVAM_API_KEY", "OPENROUTER_API_KEY", "WA_TOKEN", "WA_PHONE_NUMBER_ID", "WA_APP_SECRET",
+           "SARVAM_STT_MODEL", "SARVAM_TTS_MODEL", "SARVAM_TTS_SPEAKER", "SARVAM_LLM_MODEL"):
+    os.environ[_k] = ""  # a developer's .env must not change the defaults under test
 os.environ["DEMO_MODE"] = "on"
 os.environ["PUBLIC_BASE_URL"] = "http://localhost:8000"
 

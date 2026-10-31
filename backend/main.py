@@ -13,6 +13,7 @@ from database import SessionLocal, init_db
 from models import Product
 from routers import (admin, agent, billing, brief, cart, dashboard, events, galla, inventory,
                      invoices, khata, payments, photo, purchases, stock, voice, whatsapp)
+from services import phrases
 
 init_db()
 
@@ -27,6 +28,7 @@ async def lifespan(_: FastAPI):
         db.close()
     if empty:
         seed_module.seed(verbose=False)
+    phrases.start_warmup()  # background; skipped under DEMO_MODE=on or without a Sarvam key
     yield
 
 

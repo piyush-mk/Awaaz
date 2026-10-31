@@ -11,7 +11,6 @@ import PayQR from '../../components/app/PayQR'
 import PaidView from '../../components/app/PaidView'
 import SourceChip from '../../components/app/SourceChip'
 import { Btn } from '../../components/app/ui'
-import { speak, stopSpeaking } from '../../lib/audio'
 import { inr } from '../../lib/format'
 import { nameOf } from '../../lib/i18n'
 import {
@@ -31,8 +30,11 @@ import {
 } from '../../api/client'
 import { tr } from '../../lib/i18n'
 
+/** Key for payment announcements: one spoken line per order, even if HTTP and SSE both deliver it. */
+const moneyKey = (d) => d?.speech?.key ?? (d?.order_id ? `pay:${d.order_id}` : undefined)
+
 export default function Counter() {
-  const { sessionId, showToast, showError } = useApp()
+  const { sessionId, showToast, showError, speech } = useApp()
   const { rec, busy, room, submit: voiceSubmit } = useVoice()
 
   const [cart, setCart] = useState(null)
@@ -72,15 +74,8 @@ export default function Counter() {
     }
   }, [applyCart, sessionId, showError])
 
-  const say = useCallback(async (reply) => {
-    const rec = recRef.current
-    rec?.setSuspended(true)
-    try {
-      await speak(reply)
-    } finally {
-      setTimeout(() => rec?.setSuspended(false), 350)
-    }
-  }, [])
+  // Everything spoken goes through the one speech manager: queued, de-duplicated by key, never overlapping.
+  const say = useCallback((reply, opts) => speech.speak(reply, opts), [speech])
 
   const showCheckout = useCallback(
     (data) => {
@@ -92,9 +87,10 @@ export default function Counter() {
         paidOrders.current.add(data.order_id)
         setPaid({ ...data, amount: data.total })
         setStage('paid')
-        say(data)
+        say(data, { kind: 'money', key: moneyKey(data) })
       } else {
         setStage('pay')
+        if (data.speech) say(data)
       }
     },
     [say],
@@ -108,13 +104,13 @@ export default function Counter() {
       setPayOpen(false)
       setPaid({ ...data, amount: data.amount ?? data.invoice?.total, receipt_url: data.receipt_url || data.invoice?.receipt_url })
       setStage('paid')
-      say(data)
+      say(data, { kind: 'money', key: moneyKey(data) })
     },
     [say],
   )
 
   const newBill = useCallback(async () => {
-    stopSpeaking()
+    speech.newTurn() // money announcements are never cut
     try {
       applyCart(await clearCart(sessionId))
     } catch (e) {
@@ -127,7 +123,7 @@ export default function Counter() {
     setParchi(null)
     setPending([])
     setLast(null)
-  }, [applyCart, sessionId, showError])
+  }, [applyCart, sessionId, showError, speech])
 
   // First load: cart, open proposals, and recovery of a bill that was already created.
   useEffect(() => {
@@ -209,8 +205,10 @@ export default function Counter() {
     [showCheckout, showToast],
   )
 
-  useVoiceHandler(async ({ audio, filename, text: typed }) => {
+  useVoiceHandler(async ({ audio, filename, text: typed, ack }) => {
     const res = await sendUtterance({ audio, filename, text: typed, context: 'counter', sessionId })
+    // Render the cart from the HTTP reply right now; speech never gates it (it may still be `pending`).
+    ack?.settle() // a reply faster than ~250 ms is not talked over by the ack
     setLast(res)
     if (res.cart) applyCart(res.cart)
     else refreshCart()

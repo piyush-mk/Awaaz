@@ -160,6 +160,7 @@ class ParseOutcome:
     lines: list[CartLine]
     unmatched: list[dict]
     normalized: str
+    explained: bool = False  # the rules account for every word: safe to skip the LLM (see counter fast path)
 
 
 _DIGIT = re.compile(r"^(\d+(?:\.\d+)?)([a-z]+)?$")
@@ -487,12 +488,15 @@ def parse_order_full(text: str, db: Optional[Session] = None, index: Optional[Ca
     qty_after_style = first is not None and first.kind == "P"
 
     lines: list[CartLine] = []
+    ambiguous = False
     for e in elems:
         if e.kind != "P":
             continue
         left = _neighbour_qty(elems, e.pos, -1)
         right = _neighbour_qty(elems, e.pos, +1)
         chosen = (right or left) if qty_after_style else (left or right)
+        if len({p.sell_mode for p in e.products}) > 1 and _spoken_kind(chosen) in ("bare", "none"):
+            ambiguous = True  # "do chawal": loose or packed? let the LLM look at it
         product = choose_product(e.products, chosen)
         if chosen is not None:
             chosen.consumed = True
@@ -510,7 +514,27 @@ def parse_order_full(text: str, db: Optional[Session] = None, index: Optional[Ca
                 break
         if name and e.qty.kind != "amount":
             unmatched.append({"name": name, "qty": e.qty.value, "raw": f"{e.qty.raw} {name}".strip()})
-    return ParseOutcome(_merge(lines), unmatched, norm)
+    return ParseOutcome(_merge(lines), unmatched, norm,
+                        _explained(elems, lines, unmatched, ambiguous))
+
+
+FAST_MIN_SCORE = 85.0
+
+
+def _explained(elems: list[Elem], lines: list[CartLine], unmatched: list[dict], ambiguous: bool) -> bool:
+    """True when every content word is a matched item, quantity, unit, filler or known command:
+    no unknown words, no leftover quantity, no weak fuzzy match, no product that could be the loose
+    or the packed one, and no line that needed a guess (unit mismatch, assumed unit, rounded amount)."""
+    prods = [e for e in elems if e.kind == "P"]
+    if not prods or unmatched or ambiguous:
+        return False
+    if any(e.kind == "U" for e in elems):
+        return False
+    if any(e.kind == "Q" and e.qty is not None and not e.qty.consumed for e in elems):
+        return False
+    if any(e.score < FAST_MIN_SCORE for e in prods):
+        return False
+    return all(set(ln.flags) <= {"default_qty"} for ln in lines)
 
 
 def parse_order(text: str, db: Session) -> list[CartLine]:

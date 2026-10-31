@@ -14,10 +14,11 @@ const extFor = (mime) => (mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 
  *   const mic = useMic({ onRecorded: (blob, filename) => ... })
  *   <button onPointerDown={mic.pressStart} onPointerUp={mic.pressEnd} onPointerLeave={mic.pressEnd}
  *           onClick={mic.keyboardToggle}>
+ * `onStop()` fires the moment a recording that will be sent stops (before the blob is ready).
  * Hold (>= 350 ms) = release to send. A short tap = toggle (tap again to send). Recordings under
  * 300 ms are dropped. The microphone is released as soon as recording stops.
  */
-export default function useMic({ onRecorded } = {}) {
+export default function useMic({ onRecorded, onStop } = {}) {
   const [recording, setRecording] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const [error, setError] = useState('')
@@ -34,6 +35,8 @@ export default function useMic({ onRecorded } = {}) {
   const timer = useRef(null)
   const cb = useRef(onRecorded)
   cb.current = onRecorded
+  const stopCb = useRef(onStop)
+  stopCb.current = onStop
 
   const cleanup = useCallback(() => {
     clearInterval(timer.current)
@@ -50,7 +53,10 @@ export default function useMic({ onRecorded } = {}) {
       return
     }
     const rec = recRef.current
-    if (rec && rec.state !== 'inactive') rec.stop()
+    if (rec && rec.state !== 'inactive') {
+      if (Date.now() - startedAt.current >= 300) stopCb.current?.()
+      rec.stop()
+    }
   }, [])
 
   const start = useCallback(async () => {

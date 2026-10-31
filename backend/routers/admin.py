@@ -62,8 +62,7 @@ async def get_health(live: bool = False, db: Session = Depends(get_db)):
         "demo_mode": settings.demo_mode, "live_checked": live, "pinged": pinged,
         "db": _counts(db), "services": services, "summary": summary,
         "providers": {
-            "sarvam": _provider(settings.has_sarvam), "paytm_llm": _provider(settings.has_paytm),
-            "xai_vision": _provider(settings.has_xai),
+            "sarvam": _provider(settings.has_sarvam), "openrouter": _provider(settings.has_openrouter),
             "whatsapp": {"configured": settings.has_whatsapp,
                          "mode": "live" if settings.has_whatsapp else "simulator"},
         },
@@ -102,7 +101,9 @@ def get_status(db: Session = Depends(get_db)):
         "build": {"commit": _commit_hash(), "python_env": "venv" if os.getenv("VIRTUAL_ENV") else "system"},
         "demo_mode": {"setting": settings.demo_mode, "effective": effective, "note": note},
         "config": {
-            "sarvam_key": settings.has_sarvam, "paytm_key": settings.has_paytm, "xai_key": settings.has_xai,
+            "sarvam_key": settings.has_sarvam, "openrouter_key": settings.has_openrouter,
+            "openrouter_model": settings.openrouter_model,
+            "openrouter_vision_model": settings.openrouter_vision_model,
             "whatsapp_configured": settings.has_whatsapp,
             "whatsapp_verify_token_default": settings.wa_verify_token == "awaaz-verify",
             "wa_app_secret": bool(settings.wa_app_secret), "upi_vpa": settings.merchant_upi_vpa,
@@ -115,6 +116,8 @@ def get_status(db: Session = Depends(get_db)):
         "services": {n: {"state": s["state"], "effective": s["effective"]} for n, s in services.items()},
         "next_steps": [m for ok, m in [
             (settings.has_sarvam or settings.fixtures_only, "SARVAM_API_KEY daalein (backend/.env)"),
+            (settings.has_openrouter or settings.fixtures_only,
+             "OPENROUTER_API_KEY daalein (backup AI: Sarvam fail ho to OpenRouter)"),
             (settings.has_whatsapp, "WA_TOKEN aur WA_PHONE_NUMBER_ID daalein (warna WhatsApp simulator chalega)"),
             (settings.public_base_url.startswith("https"), "PUBLIC_BASE_URL https par set karein (mic/camera/webhook ke liye)"),
         ] if not ok],
@@ -173,6 +176,8 @@ def demo_checklist(db: Session = Depends(get_db)):
                         f"{fest['name']} ({fest['days_away']} din)" if fest else None,
                         fest is not None and fest["days_away"] <= 14, "advisory"))
     items.append(_check("sarvam_key", "SARVAM_API_KEY set", True, settings.has_sarvam, settings.has_sarvam, "advisory"))
+    items.append(_check("openrouter_key", "OPENROUTER_API_KEY set (backup when Sarvam fails)", True,
+                        settings.has_openrouter, settings.has_openrouter, "advisory"))
     items.append(_check("whatsapp_keys", "WhatsApp Cloud API keys set (warna simulator)", True,
                         settings.has_whatsapp, settings.has_whatsapp, "advisory"))
     items.append(_check("demo_mode_auto", "DEMO_MODE=auto (live + safe fallback)", "auto", settings.demo_mode,

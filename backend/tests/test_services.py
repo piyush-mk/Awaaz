@@ -8,17 +8,17 @@ import httpx
 import pytest
 
 import config
-from services import events, fixtures, http, llm, sarvam, tts_cache, vision, xai
+from services import events, fixtures, http, llm, openrouter, sarvam, tts_cache, vision
 from services.types import LLMUnavailable, ProviderError
 
-LIVE = dataclasses.replace(config.settings, sarvam_api_key="sk-test", paytm_api_key="pk-test",
-                           xai_key="xk-test", demo_mode="auto")
+LIVE = dataclasses.replace(config.settings, sarvam_api_key="sk-test", openrouter_api_key="ok-test",
+                           demo_mode="auto")
 
 
 @pytest.fixture
 def live(monkeypatch):
     """Pretend keys exist (still no network: a mock transport answers)."""
-    for mod in (sarvam, llm, vision, xai, tts_cache):
+    for mod in (sarvam, llm, vision, openrouter, tts_cache):
         monkeypatch.setattr(mod, "settings", LIVE)
     monkeypatch.setattr(http, "TRANSPORT", None)
     yield
@@ -254,7 +254,7 @@ async def test_llm_retries_once_on_503(live, monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_llm_falls_through_to_paytm(live, monkeypatch):
+async def test_llm_falls_through_to_openrouter(live, monkeypatch):
     monkeypatch.setattr(llm, "RETRY_BACKOFF_SECONDS", 0)
     hosts = []
 
@@ -262,12 +262,12 @@ async def test_llm_falls_through_to_paytm(live, monkeypatch):
         hosts.append(req.url.host)
         if req.url.host == "api.sarvam.ai":
             return httpx.Response(500)
-        assert req.headers["authorization"] == "Bearer pk-test"
+        assert req.headers["authorization"] == "Bearer ok-test"
         return httpx.Response(200, json=CHAT_OK)
 
     mock(handler)
     r = await llm.complete([{"role": "user", "content": "do maggi"}])
-    assert r.source == "paytm" and r.data.tool_calls[0].name == "add_to_cart"
+    assert r.source == "openrouter" and r.data.tool_calls[0].name == "add_to_cart"
     assert "api.sarvam.ai" in hosts
 
 
@@ -345,7 +345,7 @@ async def test_vision_unknown_task():
 
 
 @pytest.mark.anyio
-async def test_vision_chain_sarvam_then_xai(live):
+async def test_vision_chain_sarvam_then_openrouter(live):
     hosts = []
     good = {"choices": [{"message": {"content": "```json\n[{\"name\": \"Maggi\", \"quantity\": 3}]\n```"}}]}
 
@@ -358,13 +358,14 @@ async def test_vision_chain_sarvam_then_xai(live):
             assert body["model"] == "gemma4" and part["type"] == "image_url"
             assert part["image_url"]["url"].startswith("data:image/jpeg;base64,")
             return httpx.Response(500)
-        assert req.url.path == "/v1/chat/completions"
+        assert req.url.path == "/api/v1/chat/completions"
+        assert json.loads(req.content)["model"] == "google/gemini-3.1-flash-lite"
         return httpx.Response(200, json=good)
 
     mock(handler)
     r = await vision.extract_json_from_image(b"img", "image/jpeg", "shelf")
-    assert r.source == "xai" and r.data == [{"name": "Maggi", "quantity": 3}]
-    assert hosts == ["api.sarvam.ai", "api.x.ai"]
+    assert r.source == "openrouter" and r.data == [{"name": "Maggi", "quantity": 3}]
+    assert hosts == ["api.sarvam.ai", "openrouter.ai"]
 
 
 @pytest.mark.anyio

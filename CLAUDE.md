@@ -16,10 +16,13 @@ cp .env.example .env                 # every key is optional
 cd frontend && npm install && npm run dev          # http://localhost:5173 (proxies /api, /r, /k, /webhooks)
 
 # Tests
-cd backend && .venv/bin/pytest -q                  # 359 tests, no keys, no network
+cd backend && .venv/bin/pytest -q                  # no keys, no network
 python scripts/smoke.py --base http://localhost:8000   # whole demo story over HTTP (resets demo data)
 cd frontend && node scripts/check-ui.mjs --base http://localhost:5173   # every feature in real Chrome across phone, Soundbox and WhatsApp (resets demo data)
+cd frontend && node scripts/check-speech.mjs http://localhost:8000   # always pass the URL: it posts real utterances
 ```
+
+**Before changing voice, AI, live updates or the merchant UI, read `docs/MERGE-DECISIONS.md`: it says what was chosen and why.**
 
 ## Layout
 - `backend/routers/`: HTTP endpoints (agent, cart, payments, invoices, khata, purchases, galla, brief, stock, whatsapp, admin, events, plus legacy voice/photo/inventory/billing/dashboard).
@@ -29,7 +32,7 @@ cd frontend && node scripts/check-ui.mjs --base http://localhost:5173   # every 
 
 ## Conventions
 - Capture, understand, propose, confirm, commit, notify: money and stock only change after the merchant confirms (`PendingAction`).
-- Every AI call returns `{data, source, latency_ms}` and falls back: Sarvam, secondary provider, rules, fixture. `DEMO_MODE=auto` must keep the demo working with no keys.
+- Every AI call returns `{data, source, latency_ms}` and falls back: Sarvam (primary), OpenRouter (backup, limited credit), rules, fixture. Vision: Sarvam, OpenRouter, fixture. `DEMO_MODE=auto` must keep the demo working with no keys.
 - Prices are MRP inclusive; GST is worked out of the MRP (`services/pricing.py`). Rates are data, not code.
 - Run the API as a single worker (in-process event bus).
 - Never commit `.env`, databases or keys. The repo is public.

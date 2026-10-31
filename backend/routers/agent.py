@@ -37,24 +37,36 @@ async def utterance(
 ):
     """One spoken (or typed) utterance -> cart edits applied now, money/stock commits proposed.
 
-    Response: {transcript, cart, actions[], applied[], spoken_text, audio_url, source, stt_source,
-    latency_ms, demo_mode, session_id, ...}. `actions` are the PendingActions this utterance
-    created or resolved; confirm them with POST /api/actions/{id}/confirm."""
+    Response: {transcript, cart, actions[], applied[], spoken_text, audio_url, speech, source,
+    stt_source, latency_ms, timings, demo_mode, session_id, ...}. `actions` are the PendingActions this
+    utterance created or resolved; confirm them with POST /api/actions/{id}/confirm.
+
+    The reply never waits for TTS. `speech` = {text, pace, pending, key, audio_url, ack}: when the clip
+    is cached `pending` is false and `audio_url` is set (`audio_url`/`spoken_text` at the top level
+    mirror it); otherwise `pending` is true and `speech_ready {session_id, key, audio_url|null, text,
+    source}` follows on the `store` event channel (audio_url null: speak `text` with browser speech).
+    `ack` is a phrase id from GET /api/voice/phrases the client may play at once.
+    `timings` = {stt_ms, parse_ms, llm_ms, total_ms}, null where a stage was skipped. Utterances the
+    rules parser fully explains skip the LLM (source "rules", FAST_PATH=off disables)."""
     started = time.perf_counter()
     if context not in CONTEXTS:
         raise HTTPException(422, f"context must be one of {', '.join(CONTEXTS)}")
     typed = (text or transcript or "").strip()
     if not typed and audio is None:
         raise HTTPException(422, "Provide audio or text")
+    stt_ms: Optional[int] = None
     if typed:
         stt = await sarvam.stt(b"", text=typed)
     else:
+        t_stt = time.perf_counter()
         data = await audio.read()  # type: ignore[union-attr]
         stt = await sarvam.stt(data, audio.filename or "audio.webm",  # type: ignore[union-attr]
                                keyterms=catalog.keyterms(db), demo_phrase=x_demo_phrase)
+        stt_ms = int((time.perf_counter() - t_stt) * 1000)
     return await counter.run_utterance(
         db, session_id=session_id.strip() or "default", transcript=stt.data["transcript"],
-        context=context, customer_id=customer_id, stt_source=stt.source, started=started, speak=speak)
+        context=context, customer_id=customer_id, stt_source=stt.source, started=started, speak=speak,
+        stt_ms=stt_ms)
 
 
 @actions_router.get("")

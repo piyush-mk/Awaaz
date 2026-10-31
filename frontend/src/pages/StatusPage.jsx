@@ -28,12 +28,12 @@ const NAMES = {
   sarvam_tts: ['Sarvam TTS', 'Bulbul: text to speech'],
   sarvam_chat: ['Sarvam Chat', 'LLM: cart tools, brief, questions'],
   sarvam_vision: ['Sarvam Vision', 'Bills, parchi, khata page, galla'],
-  paytm_llm: ['Paytm LLM', 'Secondary chat provider'],
-  xai: ['xAI Grok', 'Vision fallback'],
+  openrouter_chat: ['OpenRouter, text and tools', 'Backup when Sarvam chat fails'],
+  openrouter_vision: ['OpenRouter, vision', 'Backup when Sarvam vision fails'],
   whatsapp: ['WhatsApp', 'Meta Cloud API or simulator'],
   db: ['Database', 'SQLite'],
 }
-const ORDER = ['sarvam_stt', 'sarvam_tts', 'sarvam_chat', 'sarvam_vision', 'paytm_llm', 'xai', 'whatsapp', 'db']
+const ORDER = ['sarvam_stt', 'sarvam_tts', 'sarvam_chat', 'sarvam_vision', 'openrouter_chat', 'openrouter_vision', 'whatsapp', 'db']
 
 const DOCS_URL = typeof window !== 'undefined' && window.location.port === '5173' ? `http://${window.location.hostname}:8000/docs` : '/docs'
 
@@ -68,6 +68,12 @@ function ProviderCard({ id, svc, pinged }) {
           <>
             <dt style={{ color: '#4A5873' }}>Model</dt>
             <dd className="truncate font-mono text-[13px]">{svc.model}</dd>
+          </>
+        )}
+        {typeof svc.credits_remaining === 'number' && (
+          <>
+            <dt style={{ color: '#4A5873' }}>Credit</dt>
+            <dd className="font-semibold tabular-nums">{`$${svc.credits_remaining.toFixed(2)} credit left`}</dd>
           </>
         )}
         <dt style={{ color: '#4A5873' }}>Last latency</dt>
@@ -349,8 +355,7 @@ export default function StatusPage() {
                 {status &&
                   [
                     ['Sarvam key', status.config.sarvam_key ? 'set' : 'not set'],
-                    ['Paytm key', status.config.paytm_key ? 'set' : 'not set'],
-                    ['xAI key', status.config.xai_key ? 'set' : 'not set'],
+                    ['OpenRouter key', status.config.openrouter_key ? 'set (backup AI)' : 'not set'],
                     ['WhatsApp', status.config.whatsapp_configured ? 'configured (live)' : 'simulator'],
                     ['WA app secret', status.config.wa_app_secret ? 'set' : 'not set'],
                     ['Public URL', status.config.public_base_url],
@@ -358,6 +363,8 @@ export default function StatusPage() {
                     ['LLM model', status.config.models.llm],
                     ['TTS model', `${status.config.models.tts} (${status.config.models.speaker})`],
                     ['Vision model', status.config.models.vision],
+                    ['OpenRouter chat model', status.config.openrouter_model],
+                    ['OpenRouter vision model', status.config.openrouter_vision_model],
                   ].map(([k, v]) => (
                     <div key={k} className="contents">
                       <dt style={{ color: '#4A5873' }}>{k}</dt>

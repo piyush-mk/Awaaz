@@ -5,8 +5,12 @@ Used by routers/agent.py (voice), routers/cart.py (manual cart) and the /api/act
 UTTERANCE PIPELINE (`run_utterance`)
   1. The rules parser result (fixtures.rules_tool_calls) is applied to the session cart at once
      and `cart_updated` is published on the `store` channel (<50 ms, before any LLM answers).
+  1b. FAST PATH (settings.fast_path, default on): when the rules parser fully explains the utterance
+     (`fast_path_ok`: every word is a matched item, quantity, unit, filler or known command; no
+     udhaar/payment/price/undo/checkout words) the LLM is skipped and the reply is built at once
+     (`source: "rules"`). Everything else continues below.
   2. The LLM tool-calling path (llm.complete_or_rules, 4 s budget) runs next. When a real model
-     (sarvam / paytm) answers with tool calls, its result REPLACES the rules result for this
+     (sarvam / openrouter) answers with tool calls, its result REPLACES the rules result for this
      utterance: the cart is restored to its pre-utterance state and the LLM calls are applied
      (so nothing is added twice). Rules/fixture answers are the same calls, so they are skipped.
   3. Cart edits (add_to_cart, remove_item, set_quantity) apply immediately and leave an audit row
@@ -14,6 +18,10 @@ UTTERANCE PIPELINE (`run_utterance`)
      Money and stock commits (checkout, split_payment, add_udhaar, record_khata_payment, restock,
      set_price) become PendingAction rows with status=proposed, resolved by
      POST /api/actions/{id}/confirm | /cancel or by saying "haan" / "galat hai".
+
+SPEECH. Replies are worded by services/voice_style.py and never wait for TTS: the response carries
+`speech {text, pace, pending, key, audio_url, ack}` (services/speech.py) and a finished clip is announced
+by the `speech_ready` event on the `store` channel.
 
 OTHER AGENTS' ACTION KINDS. `register_action_handler(kind, confirm, cancel=None)` (or a module
 attribute `ACTION_HANDLERS = {kind: fn | {"confirm": fn, "cancel": fn}}` in routers.purchases,
@@ -36,13 +44,16 @@ from typing import Any, Callable, Optional
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
 from pydantic import Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import settings
 from models import Cart as CartRow, Customer, MissedSale, PendingAction, Product
 from schemas import Cart as CartSchema, CartLine, PendingActionOut
-from services import (catalog, events, fixtures, invoicing, khata, llm, payments, pricing, quantity,
-                      receipts, stock_ops, tts_cache, whatsapp)
+from services import (catalog, events, fixtures, invoicing, khata, llm, payments, phrases, pricing,
+                      quantity, receipts, stock_ops, whatsapp)
+from services import speech as speech_svc
+from services import voice_style
 from services.clock import now_local
 from services.quantity import Qty
 from services.types import ToolCall
@@ -75,9 +86,17 @@ def get_cart(db: Session, session_id: str, *, fresh_if_done: bool = False) -> Ca
     (checked out / cancelled) is reset so the next customer starts a new cart."""
     cart = db.get(CartRow, session_id)
     if cart is None:
-        cart = CartRow(id=session_id, lines=[], status="open")
-        db.add(cart)
-        db.flush()
+        try:
+            with db.begin_nested():  # savepoint: a lost race must not poison the whole request
+                cart = CartRow(id=session_id, lines=[], status="open")
+                db.add(cart)
+                db.flush()
+        except IntegrityError:
+            # Two requests opened the same new session at once (React StrictMode, a fast double tap):
+            # the other one won, so use the cart it created.
+            cart = db.get(CartRow, session_id)
+            if cart is None:
+                raise
     elif fresh_if_done and cart.status != "open":
         reset_cart(cart)
     return cart
@@ -490,6 +509,11 @@ class Out:
     tools: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     money_proposed: bool = False
+    paces: list[float] = field(default_factory=list)  # pace of every line said, for the combined reply
+
+    def say(self, line: voice_style.Line, into: Optional[list[str]] = None) -> None:
+        (self.spoken if into is None else into).append(line.text)
+        self.paces.append(line.pace)
 
 
 def canon(name: str) -> str:
@@ -503,6 +527,24 @@ def _items_of(args: dict) -> list[dict]:
     if args.get("name") or args.get("product_id") or args.get("product"):
         return [args]
     return []
+
+
+def _qty_text(ln: CartLine) -> str:
+    """'2', '450 gram', '1 kilo 500 gram', '2 litre' for a cart line, as it is said aloud."""
+    spoken = receipts.spoken_item(ln)  # '<qty words> <name>'
+    return spoken[: -len(ln.name)].strip() if spoken.endswith(ln.name) else f"{ln.qty:g}"
+
+
+def _loose_line(ln: CartLine, session_id: Optional[str]) -> voice_style.Line:
+    """'₹20 ki Cheeni, 450 gram. Tol dijiye.' from a line that has a weigh instruction."""
+    instr = ln.weigh_instruction or ""
+    qty_text, verb = instr, "Tol"
+    for suffix, v in (" tolo", "Tol"), (" naap lo", "Naap"):
+        if instr.endswith(suffix):
+            qty_text, verb = instr[: -len(suffix)].strip(), v
+    label = f"{_rs(ln.amount_rupees)} ki {ln.name}" if ln.amount_rupees else ln.name
+    return voice_style.line("loose_item", session=session_id, label=label, name=ln.name,
+                            qty_text=qty_text, verb=verb)
 
 
 def apply_cart_edit(ctx: Ctx, call: ToolCall, out: Out) -> None:
@@ -521,31 +563,32 @@ def apply_cart_edit(ctx: Ctx, call: ToolCall, out: Out) -> None:
     elif name == "remove_item":
         target = find_line(lines, ctx.index, args.get("product_id"), str(args.get("name") or args.get("product") or ""))
         if target is None:
-            out.notes.append("Cart mein woh item nahi mila.")
+            out.say(voice_style.line("nothing_understood", session=ctx.session_id), out.notes)
         else:
             lines.remove(target)
-            out.notes.append(f"{target.name} hata diya.")
+            out.say(voice_style.line("item_removed", session=ctx.session_id, name=target.name), out.notes)
             out.applied.append({"tool": name, "product_id": target.product_id})
     elif name == "set_quantity":
         target = find_line(lines, ctx.index, args.get("product_id"), str(args.get("name") or args.get("product") or ""))
         qty = _num(args.get("qty", args.get("quantity")))
         if target is None or qty is None:
-            out.notes.append("Cart mein woh item nahi mila.")
+            out.say(voice_style.line("nothing_understood", session=ctx.session_id), out.notes)
         elif qty <= 0:
             lines.remove(target)
-            out.notes.append(f"{target.name} hata diya.")
+            out.say(voice_style.line("item_removed", session=ctx.session_id, name=target.name), out.notes)
             out.applied.append({"tool": name, "product_id": target.product_id, "qty": 0})
         else:
             set_line_qty(target, qty, args.get("unit"))
-            out.notes.append(f"{receipts.spoken_item(target)} kar diya.")
+            out.say(voice_style.line("qty_changed", session=ctx.session_id, name=target.name,
+                                     qty_text=_qty_text(target)), out.notes)
             if target.weigh_instruction:
-                out.notes.append(f"{target.name}: {target.weigh_instruction}.")
+                out.say(_loose_line(target, ctx.session_id), out.notes)
             out.applied.append({"tool": name, "product_id": target.product_id, "qty": target.qty})
     elif name == "add_usual":
         customer = lookup_customer(ctx.db, args.get("customer_id")) if args.get("customer_id") else (
             ctx.db.get(Customer, ctx.cart.customer_id) if ctx.cart.customer_id else None)
         if customer is None or not customer.usual_basket:
-            out.notes.append("Usual basket nahi mila. Customer ka naam batayein.")
+            out.say(voice_style.line("ask_customer", session=ctx.session_id), out.notes)
         else:
             for ln in usual_lines(ctx.db, customer):
                 merge_into(lines, ln)
@@ -596,11 +639,12 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
     args = call.arguments or {}
     db = ctx.db
     out.tools.append(name)
+    sid = ctx.session_id
 
     if name == "checkout":
         lines = read_lines(ctx.cart)
         if not lines:
-            out.spoken.append("Cart khali hai, pehle saaman bolein.")
+            out.say(voice_style.line("cart_empty", session=sid))
             return
         totals = reprice(db, lines)
         customer = resolve_customer(ctx, args) if (args.get("customer") or args.get("customer_id")) else None
@@ -611,19 +655,19 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
             "customer_id": ctx.cart.customer_id,
             "summary": f"Bill {_rs(totals.total)}, {len(lines)} items"}, ("checkout", "split_payment"))
         out.money_proposed = True
-        out.spoken.append(f"Kul {_rs(totals.total)}. Bill banaun? Haan bolo.")
+        out.say(voice_style.line("confirm_needed", session=sid, total=totals.total))
 
     elif name == "split_payment":
         lines = read_lines(ctx.cart)
         if not lines:
-            out.spoken.append("Cart khali hai, pehle saaman bolein.")
+            out.say(voice_style.line("cart_empty", session=sid))
             return
         totals = reprice(db, lines)
         splits = {k: _num(args.get(k)) for k in ("cash", "upi", "khata") if k in args}
         try:
             parts = payments.allocate(totals.total, splits)
-        except HTTPException as exc:
-            out.spoken.append(f"Hisaab nahi baith raha: {exc.detail}.")
+        except HTTPException:
+            out.say(voice_style.line("split_mismatch", session=sid, total=totals.total))
             return
         customer = resolve_customer(ctx, args)
         needs_customer = parts["khata"] > 0 and customer is None
@@ -637,17 +681,21 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
             "needs_customer": needs_customer,
             "summary": "Bill " + _rs(totals.total) + ": " + ", ".join(bits)}, ("checkout", "split_payment"))
         out.money_proposed = True
-        out.spoken.append(f"Kul {_rs(totals.total)}: " + ", ".join(bits) + ".")
-        out.spoken.append("Kiske khate mein likhun?" if needs_customer else "Theek hai? Haan bolo.")
+        if needs_customer:
+            out.say(voice_style.line("split_parts", session=sid, total=totals.total, parts=", ".join(bits)))
+            out.say(voice_style.line("ask_khata_customer", session=sid))
+        else:
+            out.say(voice_style.line("split_summary", session=sid, total=totals.total,
+                                     parts=", ".join(bits)))
 
     elif name in ("add_udhaar", "record_khata_payment"):
         customer = resolve_customer(ctx, args)
         amount = _num(args.get("amount"))
         if customer is None:
-            out.spoken.append("Kaun se customer? Naam samajh nahi aaya.")
+            out.say(voice_style.line("ask_customer", session=sid))
             return
         if not amount or amount <= 0:
-            out.spoken.append(f"{customer.name} ke khate mein kitna likhun?")
+            out.say(voice_style.line("ask_amount", session=sid, customer=customer.name))
             return
         bal = khata.balance(db, customer.id)
         if name == "add_udhaar":
@@ -661,20 +709,18 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
                        "late_payments": late, "suggested_limit": suggested, "over_limit": over,
                        "risk": "high" if over or late >= 3 else "low",
                        "summary": f"{customer.name} ke khate mein {_rs(amount)}"}
-            msg = f"{customer.name} ke khate mein {_rs(amount)} likhun? Abhi baaki {_rs(bal)}"
-            if late:
-                msg += f", {late} baar late"
-            msg += ". " + ("Limit se upar ho jayega, dhyan rakhein. " if over else "") + "Haan bolo."
+            msg = voice_style.line("udhaar_over_limit" if over else "udhaar_proposed", session=sid,
+                                   customer=customer.name, amount=amount)
             propose(ctx, out, "add_udhaar", payload)
         else:
             after = round(bal - amount, 2)
             payload = {"customer_id": customer.id, "customer_name": customer.name, "amount": amount,
                        "balance_before": bal, "balance_after": after,
                        "summary": f"{customer.name} se {_rs(amount)} mile"}
-            msg = f"{customer.name} se {_rs(amount)} jama karun? Baaki {_rs(max(after, 0))} rahega. Haan bolo."
+            msg = voice_style.line("khata_payment", session=sid, customer=customer.name, amount=amount)
             propose(ctx, out, "record_khata_payment", payload)
         out.money_proposed = True
-        out.spoken.append(msg)
+        out.say(msg)
 
     elif name == "restock":
         items = []
@@ -686,14 +732,14 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
             items.append({"product_id": ln.product_id, "name": ln.name, "name_hi": ln.name_hi,
                           "quantity": ln.qty, "unit": ln.unit})
         if not items:
-            out.spoken.append("Kaun sa maal aaya? Dobara bolein.")
+            out.say(voice_style.line("restock_ask", session=sid))
             return
         spoken_items = ", ".join(
             f"{i['quantity']:g} {i['unit']} {i['name']}" if i["unit"] in ("kg", "litre")
             else f"{i['quantity']:g} {i['name']}" for i in items)
         propose(ctx, out, "restock", {"items": items, "summary": f"Stock in: {spoken_items}"})
         out.money_proposed = True
-        out.spoken.append(f"{spoken_items} stock mein jodun? Haan bolo.")
+        out.say(voice_style.line("restock_proposed", session=sid, items=spoken_items))
 
     elif name == "set_price":
         price = _num(args.get("price"))
@@ -701,7 +747,7 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
         if product is None and (args.get("product") or args.get("name")):
             product, _ = ctx.index.find_in_phrase(str(args.get("product") or args.get("name")))
         if product is None or not price or price <= 0:
-            out.spoken.append("Kaun sa item aur kitna rate? Dobara bolein.")
+            out.say(voice_style.line("price_ask", session=sid))
             return
         unit = "kg" if product.is_loose and product.base_unit == "kg" else \
             "litre" if product.is_loose and product.base_unit == "l" else product.unit
@@ -709,7 +755,8 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
                                         "old_price": product.price, "new_price": price,
                                         "summary": f"{product.name} ka rate {_rs(product.price)} se {_rs(price)}"})
         out.money_proposed = True
-        out.spoken.append(f"{product.name} ka rate {_rs(product.price)} se {_rs(price)} per {unit}? Haan bolo.")
+        out.say(voice_style.line("price_proposed", session=sid, name=product.name, old_price=product.price,
+                                 new_price=price, unit=unit))
 
     elif name == "missed_sale":
         pname = str(args.get("product") or args.get("name") or "").strip()
@@ -718,31 +765,57 @@ def apply_other(ctx: Ctx, call: ToolCall, out: Out) -> None:
             db.add(MissedSale(product_name=pname.title() if pname.islower() else pname,
                               product_id=product.id if product else None))
             out.missed.append(pname)
-            out.spoken.append(f"{pname.title()} nahi hai, note kar liya.")
+            out.say(voice_style.line("missed_sale", session=sid, name=pname.title()))
 
     elif name == "answer":
         text = str(args.get("text") or "").strip()
         if text:
             out.spoken.append(text)
+            out.paces.append(voice_style.pace_for(None, text))
 
 
-def compose_spoken(db: Session, ctx: Ctx, out: Out, cart_changed: bool) -> str:
+def compose_spoken(db: Session, ctx: Ctx, out: Out, cart_changed: bool) -> tuple[str, float]:
+    """The reply for one utterance: (text, pace). Weigh-out instructions first (the merchant has to
+    act on them), then what was added with the running total, then notes and other tools' sentences."""
+    sid = ctx.session_id
     parts: list[str] = []
+    paces: list[float] = list(out.paces)
+    total_said = False
+    plain = [ln for ln in out.added if not ln.weigh_instruction]
+    for ln in out.added:
+        if ln.weigh_instruction:
+            line = _loose_line(ln, sid)
+            parts.append(line.text)
+            paces.append(line.pace)
+    lines_now = read_lines(ctx.cart)
+    show_total = cart_changed and not out.money_proposed and bool(lines_now)
     if out.added:
-        parts.append(", ".join(receipts.spoken_item(ln) for ln in out.added) + " add kiye.")
-        for ln in out.added:
-            if ln.weigh_instruction:
-                label = f"₹{receipts.fmt_money(ln.amount_rupees)} ki {ln.name}" if ln.amount_rupees else ln.name
-                parts.append(f"{label}: {ln.weigh_instruction}.")
-    parts.extend(out.notes)
-    if cart_changed and not out.money_proposed:
-        lines = read_lines(ctx.cart)
-        if lines:
-            parts.append(f"Total {_rs(reprice(db, lines).total)}.")
+        names = ", ".join(receipts.spoken_item(ln) for ln in plain)
+        named = {"items": names} if plain and len(plain) <= 3 and len(names) <= 70 else {}
+        if show_total:
+            if plain:
+                line = voice_style.line("items_added", session=sid, total=reprice(db, lines_now).total, **named)
+            else:
+                line = voice_style.line("total_now", session=sid, total=reprice(db, lines_now).total)
+            total_said = True
+        elif named:
+            line = voice_style.line("items_noted", session=sid, **named)
         else:
-            parts.append("Cart khali hai.")
+            line = voice_style.line("generic_ok", session=sid)
+        parts.append(line.text)
+        paces.append(line.pace)
+    parts.extend(out.notes)
+    if cart_changed and not out.money_proposed and not total_said:
+        if lines_now:
+            line = voice_style.line("total_now", session=sid, total=reprice(db, lines_now).total)
+        else:
+            line = voice_style.line("cart_empty", session=sid)
+        parts.append(line.text)
+        paces.append(line.pace)
     parts.extend(out.spoken)
-    return " ".join(p for p in parts if p).strip()
+    text = voice_style.clip(" ".join(p for p in parts if p), 220)
+    pace = max(0.93, min(paces)) if paces else voice_style.pace_for(None, text)
+    return text, round(pace, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -840,7 +913,9 @@ def _commit_udhaar(db: Session, action: PendingAction, body: dict) -> dict:
     if sent:
         entry.wa_status = "queued"
     return {"entry_id": entry.id, "balance": bal, "whatsapp": sent,
-            "spoken_text": f"{customer.name} ke khate mein {_rs(p['amount'])} likh diya. Kul baaki {_rs(bal)}."}
+            "spoken_text": voice_style.line("udhaar_confirmed", session=action.session_id,
+                                            customer=customer.name, amount=p["amount"],
+                                            balance=bal).text}
 
 
 def _commit_khata_payment(db: Session, action: PendingAction, body: dict) -> dict:
@@ -850,7 +925,9 @@ def _commit_khata_payment(db: Session, action: PendingAction, body: dict) -> dic
     bal = khata.balance(db, p["customer_id"])
     sent = _wa(db, customer, f"₹{_inr(p['amount'])} mil gaye. Kul baaki ₹{_inr(max(bal, 0))}. Dhanyavaad.")
     return {"entry_id": entry.id, "balance": bal, "whatsapp": sent,
-            "spoken_text": f"{customer.name} se {_rs(p['amount'])} jama ho gaye. Baaki {_rs(max(bal, 0))}."}
+            "spoken_text": voice_style.line("khata_payment_done", session=action.session_id,
+                                            customer=customer.name, amount=p["amount"],
+                                            balance=max(bal, 0)).text}
 
 
 def _commit_restock(db: Session, action: PendingAction, body: dict) -> dict:
@@ -862,8 +939,11 @@ def _commit_restock(db: Session, action: PendingAction, body: dict) -> dict:
         updated.append({"product_id": it["product_id"], "name": it["name"], "unit": it.get("unit", ""),
                         "old_quantity": before, "new_quantity": round(before + float(it["quantity"]), 3)})
     db.flush()
-    text = ", ".join(f"{u['name']} {u['new_quantity']:g}" for u in updated)
-    return {"updated": updated, "spoken_text": f"Stock update ho gaya: {text}."}
+    text = ", ".join(f"{u['name']} {u['new_quantity']:g}" for u in updated[:3])
+    if len(updated) > 3:
+        text += f" aur {len(updated) - 3} aur"
+    return {"updated": updated,
+            "spoken_text": voice_style.line("restock_done", session=action.session_id, items=text).text}
 
 
 def _commit_set_price(db: Session, action: PendingAction, body: dict) -> dict:
@@ -876,7 +956,8 @@ def _commit_set_price(db: Session, action: PendingAction, body: dict) -> dict:
     if product.is_loose:
         product.loose_price_per_base = new
     return {"product_id": product.id, "price": new,
-            "spoken_text": f"{product.name} ka rate ab {_rs(new)} hai."}
+            "spoken_text": voice_style.line("price_done", session=action.session_id, name=product.name,
+                                            price=new).text}
 
 
 for _kind, _fn in (("checkout", _commit_checkout), ("split_payment", _commit_split),
@@ -922,23 +1003,27 @@ async def resolve_action(db: Session, action_id: int, decision: str, body: Optio
             db.commit()
         else:
             already = True
-        result = result or {"spoken_text": "Cancel kar diya."}
-        result.setdefault("spoken_text", "Cancel kar diya.")
+        result = result or {}
+        result.setdefault("spoken_text", voice_style.line("action_cancelled", session=action.session_id).text)
 
-    spoken = str(result.get("spoken_text") or "")
-    audio_url = result.get("audio_url")
-    if speak and spoken and "audio_url" not in result:
-        audio_url = (await tts_cache.get_speech(spoken)).url
     session = action.session_id or action.payload.get("session_id")
+    spoken = str(result.get("spoken_text") or "")
+    # A commit may already carry its own `speech` (checkout); otherwise ask for the clip now. Either
+    # way nothing here waits for TTS: a missing clip is generated in the background (`speech_ready`).
+    speech = result.get("speech") if (not already and isinstance(result.get("speech"), dict)) else None
+    if speech is None:
+        speech = speech_svc.request(spoken, session_id=session, speak=speak and bool(spoken),
+                                    ack=phrases.ack_for("done", session=session))
+    audio_url = speech.get("audio_url")
     cart = db.get(CartRow, session) if session else None
     if not already:
         events.publish("store", "action_resolved", jsonable_encoder({
             "id": action.id, "kind": action.kind, "status": action.status, "session_id": session,
-            "summary": (action.payload or {}).get("summary"), "spoken_text": spoken}))
+            "summary": (action.payload or {}).get("summary"), "spoken_text": spoken, "speech": speech}))
         if cart is not None:
             announce_cart(db, cart)
     return {"action": action_json(action), "result": result, "spoken_text": spoken,
-            "audio_url": audio_url, "already_resolved": already,
+            "audio_url": audio_url, "speech": speech, "already_resolved": already,
             "cart": view_json(db, cart) if cart is not None else None}
 
 
@@ -958,66 +1043,143 @@ def _latest(db: Session, session_id: str, statuses: tuple, kinds: Optional[tuple
     return q.order_by(PendingAction.id.desc()).first()
 
 
-def _envelope(db: Session, cart: CartRow, *, transcript: str, spoken: str, audio_url: Optional[str],
+def _timings(started: float, stt_ms: Optional[int] = None, parse_ms: Optional[int] = None,
+             llm_ms: Optional[int] = None) -> dict:
+    """Cheap latency visibility: null where a stage was skipped (typed text has no STT, the fast path no LLM)."""
+    return {"stt_ms": stt_ms, "parse_ms": parse_ms, "llm_ms": llm_ms,
+            "total_ms": int((time.perf_counter() - started) * 1000)}
+
+
+def _envelope(db: Session, cart: CartRow, *, transcript: str, spoken: str, speech: dict,
               actions: list[PendingAction], source: str, started: float, stt_source: str,
-              applied: Optional[list] = None, **extra: Any) -> dict:
+              timings: Optional[dict] = None, applied: Optional[list] = None, **extra: Any) -> dict:
+    timings = timings or _timings(started)
     return {
         "transcript": transcript, "cart": view_json(db, cart),
         "actions": [action_json(a) for a in actions], "applied": applied or [],
-        "spoken_text": spoken, "audio_url": audio_url, "source": source, "stt_source": stt_source,
-        "latency_ms": int((time.perf_counter() - started) * 1000),
+        "spoken_text": spoken, "audio_url": speech.get("audio_url"), "speech": speech,
+        "source": source, "stt_source": stt_source,
+        "latency_ms": timings["total_ms"], "timings": timings,
         "demo_mode": settings.fixtures_only or stt_source == "fixture" or source == "fixture",
         "session_id": cart.id, **extra}
 
 
-async def _speak(spoken: str, speak: bool) -> Optional[str]:
-    if not (speak and spoken):
-        return None
-    return (await tts_cache.get_speech(spoken)).url
+def _say(text: str, session_id: str, speak: bool, *, kind: Optional[str] = None,
+         pace: Optional[float] = None, ack: Optional[str] = None) -> dict:
+    return speech_svc.request(text, kind=kind, pace=pace, session_id=session_id, speak=speak, ack=ack)
 
 
 async def _control(db: Session, cart: CartRow, kind: str, transcript: str, started: float,
-                   stt_source: str, speak: bool) -> dict:
+                   stt_source: str, speak: bool, stt_ms: Optional[int] = None) -> dict:
     """'haan' confirms, 'galat hai' / 'cancel' undoes the newest pending action or cart edit."""
     touched: list[PendingAction] = []
+    sid = cart.id
     if kind == "confirm":
         action = _latest(db, cart.id, ("proposed",), exclude_kind="cart_edit")
         if action is None:
-            spoken, audio = "Confirm karne ke liye kuch nahi hai.", await _speak(
-                "Confirm karne ke liye kuch nahi hai.", speak)
+            line = voice_style.line("nothing_to_confirm", session=sid)
+            spoken, speech = line.text, _say(line.text, sid, speak, kind=line.kind,
+                                             ack=phrases.ack_for("unclear", session=sid))
         else:
             res = await resolve_action(db, action.id, "confirm", {}, speak=speak)
-            spoken, audio = res["spoken_text"], res["audio_url"]
+            spoken, speech = res["spoken_text"], res["speech"]
             touched.append(action)
         db.refresh(cart)
-        return _envelope(db, cart, transcript=transcript, spoken=spoken, audio_url=audio, actions=touched,
-                         source="rules", started=started, stt_source=stt_source, control="confirm")
+        return _envelope(db, cart, transcript=transcript, spoken=spoken, speech=speech, actions=touched,
+                         source="rules", started=started, stt_source=stt_source,
+                         timings=_timings(started, stt_ms, 0), control="confirm")
 
     pending = _latest(db, cart.id, ("proposed",), exclude_kind="cart_edit")
     last_edit = _latest(db, cart.id, ("confirmed",), kinds=("cart_edit",))
-    spoken = "Undo karne ke liye kuch nahi hai."
+    line = voice_style.line("nothing_to_undo", session=sid)
     if pending is not None and (kind == "no" or last_edit is None or pending.id > last_edit.id):
-        res = await resolve_action(db, pending.id, "cancel", {}, speak=False)
-        spoken = f"Theek hai, {(pending.payload or {}).get('summary') or pending.kind} cancel kar diya."
+        await resolve_action(db, pending.id, "cancel", {}, speak=False)
+        line = voice_style.line("action_cancelled", session=sid)
         touched.append(pending)
     elif kind == "undo" and last_edit is not None:
         if cart.status != "open":
-            spoken = "Bill ban chuka hai, ab wapas nahi ho sakta."
+            line = voice_style.line("undo_after_bill", session=sid)
         else:
             cart.lines = (last_edit.payload or {}).get("before", [])
             last_edit.status = "cancelled"
             last_edit.resolved_at = now_local()
             db.commit()
             announce_cart(db, cart, undone=True)
-            spoken = "Theek hai, pichla badlaav wapas kar diya."
-    audio = await _speak(spoken, speak)
-    return _envelope(db, cart, transcript=transcript, spoken=spoken, audio_url=audio, actions=touched,
-                     source="rules", started=started, stt_source=stt_source, control="undo")
+            line = voice_style.line("undo_done", session=sid)
+    speech = _say(line.text, sid, speak, kind=line.kind, pace=line.pace,
+                  ack=phrases.ack_for("cancelled" if touched else "unclear", session=sid))
+    return _envelope(db, cart, transcript=transcript, spoken=line.text, speech=speech, actions=touched,
+                     source="rules", started=started, stt_source=stt_source,
+                     timings=_timings(started, stt_ms, 0), control="undo")
+
+
+# Words that mean more than "add these items": money, khata, prices, undo, checkout. An utterance with
+# any of them never takes the fast path, even if the item parser explains the rest.
+INTENT_WORDS = {
+    "udhaar", "udhar", "khata", "khate", "उधार", "खाता", "खाते", "cash", "paytm", "upi", "phonepe", "gpay",
+    "naqad", "nakad", "rate", "bhav", "bhaav", "daam", "dam", "price", "galat", "undo", "cancel", "ruko",
+    "rukiye", "nahi", "nahin", "khatam", "usual", "jama", "wapas", "bill", "total", "hisaab", "kitna",
+    "kitne", "payment", "diye", "diya", "chukaya", "chukaye"}
+FAST_CALLS = {"add_to_cart", "restock"}
+FAST_FIX_CALLS = {"remove_item", "set_quantity"}
+
+
+def fast_path_ok(norm: str, context: str, extra: Optional[list[ToolCall]],
+                 rule_calls: list[ToolCall], index: catalog.CatalogIndex) -> bool:
+    """True when the rules parser fully explains the utterance, so the LLM adds nothing but latency:
+    items with explicit or defaulted quantities, or a cart fix ('Maggi hata do', 'Colgate ek kar do')
+    that matched a line already in the cart. See quantity.ParseOutcome.explained."""
+    if not settings.fast_path or context not in ("counter", "stock") or not rule_calls:
+        return False
+    names = {canon(c.name) for c in rule_calls}
+    words = set(norm.split())
+    if extra:  # "maggi teen nahi do" is a fix, but "maggi ka rate pachaas kar do" is a price change
+        return names <= FAST_FIX_CALLS and not (words & (INTENT_WORDS - {"nahi", "nahin"}))
+    if names != {"add_to_cart"} and names != {"restock"}:
+        return False
+    if words & INTENT_WORDS:
+        return False
+    return quantity.parse_order_full(norm, index=index).explained
+
+
+def _item_quantities(call: ToolCall, index: catalog.CatalogIndex) -> Optional[dict[int, Optional[float]]]:
+    """{product id: qty} of an add_to_cart / restock call. None when an item cannot be resolved."""
+    out: dict[int, Optional[float]] = {}
+    for item in _items_of(call.arguments or {}):
+        pid = item.get("product_id")
+        if not pid:
+            product, _ = index.find_in_phrase(str(item.get("name") or item.get("product") or ""))
+            pid = product.id if product else None
+        if not pid:
+            return None
+        out[int(pid)] = _num(item.get("qty", item.get("quantity")))
+    return out
+
+
+def rules_outrank_llm(rule_calls: list[ToolCall], llm_calls: list[ToolCall], snapshot: list[dict],
+                      index: catalog.CatalogIndex) -> bool:
+    """The LLM runs when the rules were not fully sure, but it must not overrule them on what they do know.
+    Seen live with sarvam-105b: rules read "do maggi ek surf chaar colgate" correctly, and the model answered
+    4 Surf and 1 Colgate, or tried to edit lines of an empty cart. The money rule is that a bill shows what was
+    said, so when both name the same items the tested quantity parser wins."""
+    rule_names = {canon(c.name) for c in rule_calls}
+    llm_names = {canon(c.name) for c in llm_calls}
+    if not rule_names or not rule_names <= FAST_CALLS:
+        return False
+    if llm_names <= FAST_FIX_CALLS:
+        return not snapshot  # it wants to change lines, and there are none yet: it misread an order
+    if not llm_names <= FAST_CALLS or len(rule_calls) != 1 or len(llm_calls) != 1:
+        return False
+    ruled, asked = _item_quantities(rule_calls[0], index), _item_quantities(llm_calls[0], index)
+    if ruled is None or asked is None or set(ruled) != set(asked):
+        return False
+    return any(asked[p] is not None and ruled[p] is not None and abs(asked[p] - ruled[p]) > 1e-6 for p in ruled)
 
 
 async def run_utterance(db: Session, *, session_id: str, transcript: str, context: str = "counter",
                         customer_id: Optional[int] = None, stt_source: str = "rules",
-                        started: Optional[float] = None, speak: bool = True) -> dict:
+                        started: Optional[float] = None, speak: bool = True,
+                        stt_ms: Optional[int] = None) -> dict:
     """Run one transcript through the pipeline described in the module docstring."""
     started = started if started is not None else time.perf_counter()
     cart = get_cart(db, session_id, fresh_if_done=True)
@@ -1027,25 +1189,32 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
         cart.customer_id = customer_id
     norm = catalog.normalize(transcript)
     if not norm:
-        spoken = "Kuch sunai nahi diya, dobara bolein."
-        return _envelope(db, cart, transcript=transcript, spoken=spoken, audio_url=None, actions=[],
-                         source="rules", started=started, stt_source=stt_source)
+        line = voice_style.line("nothing_heard", session=session_id)
+        return _envelope(db, cart, transcript=transcript, spoken=line.text, actions=[],
+                         speech=_say(line.text, session_id, speak, kind=line.kind, pace=line.pace,
+                                     ack=phrases.ack_for("silent", session=session_id)),
+                         source="rules", started=started, stt_source=stt_source,
+                         timings=_timings(started, stt_ms))
 
     control = classify_control(norm)
     if control:
-        return await _control(db, cart, control, transcript, started, stt_source, speak)
+        return await _control(db, cart, control, transcript, started, stt_source, speak, stt_ms)
 
     index = catalog.load_index(db)
     ctx = Ctx(db, session_id, cart, index, context, transcript)
     snapshot = [dict(d) for d in (cart.lines or [])]
 
     # 1. rules result, applied to the cart immediately
+    t_parse = time.perf_counter()
     rule_calls: list[ToolCall] = []
+    extra: Optional[list[ToolCall]] = None
     if context != "ask":
-        rule_calls = extra_rules(db, norm, index, read_lines(cart)) or fixtures.rules_tool_calls(transcript, db, context)
+        extra = extra_rules(db, norm, index, read_lines(cart))
+        rule_calls = extra or fixtures.rules_tool_calls(transcript, db, context)
+    fast = fast_path_ok(norm, context, extra, rule_calls, index)
     edit_calls = [c for c in rule_calls if canon(c.name) in CART_EDITS]
     out = Out()
-    ctx.source = "fixture" if settings.fixtures_only else "rules"
+    ctx.source = "rules" if fast else ("fixture" if settings.fixtures_only else "rules")
     for call in edit_calls:
         try:
             apply_cart_edit(ctx, call, out)
@@ -1055,21 +1224,21 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
     if edit_calls:
         db.commit()
         announce_cart(db, cart, transcript=transcript, source=ctx.source, stage="rules")
+    parse_ms = int((time.perf_counter() - t_parse) * 1000)
 
-    # 2. LLM tool calling, only when the rules did not fully understand. Exact quantities from the tested
-    # parser must not be overwritten by a slower model guess (it has returned 4 Surf for "ek Surf").
-    rules_sure = (bool(rule_calls) and not out.errors and not out.unmatched
-                  and any(canon(c.name) != "missed_sale" for c in rule_calls))
+    # 2. LLM tool calling, reconciled over the rules result (skipped on the fast path)
     llm_calls: Optional[list[ToolCall]] = None
     llm_text = ""
     final_source = ctx.source
     latency = 0
-    if transcript.strip() and not rules_sure:
+    llm_ms: Optional[int] = None
+    if not fast:
+        t_llm = time.perf_counter()
         try:
             res = await asyncio.wait_for(
                 llm.complete_or_rules(build_messages(db, cart, index, transcript, context), db,
                                       tools=TOOLS, context=context, timeout=4.0), timeout=5.5)
-            if res.source in ("sarvam", "paytm"):
+            if res.source in ("sarvam", "openrouter"):
                 if res.data.tool_calls:
                     llm_calls = [ToolCall("restock" if context == "stock" and canon(c.name) == "add_to_cart"
                                           else canon(c.name), c.arguments or {}, c.id)
@@ -1080,6 +1249,10 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
                     final_source, latency = res.source, res.latency_ms
         except Exception as exc:  # noqa: BLE001  (timeout, LLMUnavailable, bad shape): keep rules result
             log.info("llm path skipped: %s", exc.__class__.__name__)
+        llm_ms = int((time.perf_counter() - t_llm) * 1000)
+    if llm_calls is not None and rules_outrank_llm(rule_calls, llm_calls, snapshot, index):
+        log.info("kept the rules result over the LLM for %r", transcript[:80])
+        llm_calls, llm_text, final_source, latency = None, "", ctx.source, 0
     ctx.source, ctx.latency_ms = final_source, latency
 
     if llm_calls is not None:
@@ -1104,6 +1277,7 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
                 out.errors.append(f"{call.name}: {exc}")
         if not rule_calls and llm_text:
             out.spoken.append(llm_text)
+            out.paces.append(voice_style.pace_for(None, llm_text))
 
     # missed sales for names that were asked for but are not in the catalog
     for name in out.unmatched:
@@ -1112,11 +1286,14 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
 
     cart_changed = list(cart.lines or []) != snapshot
     out.spoken = list(dict.fromkeys(out.spoken))
+    out.notes = list(dict.fromkeys(out.notes))
     if context == "ask" and not out.spoken:
-        out.spoken.append("Abhi is sawaal ka jawab nahi de sakta. Sarvam key judte hi bata paunga.")
-    spoken = compose_spoken(db, ctx, out, cart_changed)
+        out.say(voice_style.line("ask_unavailable", session=session_id))
+    spoken, pace = compose_spoken(db, ctx, out, cart_changed)
+    understood = bool(spoken)
     if not spoken:
-        spoken = "Samajh nahi aaya, dobara bolein."
+        line = voice_style.line("nothing_understood", session=session_id)
+        spoken, pace = line.text, line.pace
 
     if cart_changed:
         db.add(PendingAction(kind="cart_edit", status="confirmed", session_id=session_id,
@@ -1126,13 +1303,19 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
     db.commit()
     if (cart_changed and llm_calls is not None) or out.actions:
         announce_cart(db, cart, transcript=transcript, source=final_source, stage="llm")
+
+    situation = ("unclear" if not understood else "money" if out.actions else
+                 "added" if out.added else "done")
+    speech = _say(spoken, session_id, speak, pace=pace,
+                  ack=phrases.ack_for(situation, session=session_id))
     for action in out.actions:
         events.publish("store", "action_proposed", jsonable_encoder(
-            {"session_id": session_id, "action": action_json(action), "spoken_text": spoken}))
-    audio_url = await _speak(spoken, speak)
+            {"session_id": session_id, "action": action_json(action), "spoken_text": spoken,
+             "speech": speech}))
     events.publish("store", "utterance", {"session_id": session_id, "transcript": transcript,
-                                          "spoken_text": spoken, "audio_url": audio_url,
-                                          "source": final_source})
-    return _envelope(db, cart, transcript=transcript, spoken=spoken, audio_url=audio_url,
+                                          "spoken_text": spoken, "audio_url": speech["audio_url"],
+                                          "speech": speech, "source": final_source})
+    return _envelope(db, cart, transcript=transcript, spoken=spoken, speech=speech,
                      actions=out.actions, source=final_source, started=started, stt_source=stt_source,
+                     timings=_timings(started, stt_ms, parse_ms, llm_ms),
                      applied=out.applied, missed=out.missed, errors=out.errors)

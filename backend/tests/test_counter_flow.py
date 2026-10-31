@@ -1,4 +1,6 @@
 """Counter flow (Agent A): utterance -> cart -> checkout -> payment -> receipts. No API keys, no network."""
+import dataclasses
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -67,7 +69,7 @@ def test_amount_based_cheeni_weigh_instruction(client):
     assert line["name"] == "Cheeni" and line["qty"] == 0.45
     assert line["weigh_instruction"] == "450 gram tolo"
     assert line["amount_rupees"] == 20.0 and line["line_total"] == 20.0
-    assert "450 gram tolo" in r["spoken_text"]
+    assert "450 gram" in r["spoken_text"] and "Tol" in r["spoken_text"]  # the weigh-out instruction is spoken
     assert r["cart"]["total"] == 20.0
     co = client.post("/api/cart/s-cheeni/checkout", json={"rail": "simulated"}).json()
     assert co["total"] == 20.0
@@ -99,7 +101,7 @@ def test_checkout_simulate_receipts_and_idempotence(client):
     sim = client.post(f"/api/payments/{order}/simulate").json()
     assert sim["ok"] and sim["already_paid"] is False
     assert sim["invoice_paid"] is True
-    assert "₹249" in sim["spoken_text"] and "prapt hue" in sim["spoken_text"]
+    assert "₹249" in sim["spoken_text"] and sim["speech"]["text"] == sim["spoken_text"]
     assert any(item["name"] == "Colgate" and item["quantity"] == 8 for item in sim["low_stock"])
     assert stock(5) == 8
     inv = client.get(f"/api/invoices/{co['invoice_id']}").json()
@@ -107,7 +109,7 @@ def test_checkout_simulate_receipts_and_idempotence(client):
 
     pr = store_events(mark, "payment_received")
     assert len(pr) == 1 and pr[0]["data"]["amount"] == 249.0
-    assert pr[0]["data"]["spoken_text"].startswith("₹249 prapt hue")
+    assert "₹249" in pr[0]["data"]["spoken_text"] and pr[0]["data"]["speech"]["text"]
 
     db = SessionLocal()
     new = db.query(Message).order_by(Message.id.desc()).limit(db.query(Message).count() - msgs_before).all()
@@ -117,7 +119,8 @@ def test_checkout_simulate_receipts_and_idempotence(client):
     text = next(m for m in new if m.type == "text")
     assert inv["number"] in text.body and f"/r/{inv['public_token']}" in text.body
     audio = next(m for m in new if m.type == "audio")
-    assert audio.body.startswith("Aapne 2 Maggi, 1 Surf Excel, 4 Colgate liya, kul ₹249")
+    assert "2 Maggi, 1 Surf Excel, 4 Colgate" in audio.body and "₹249" in audio.body
+    assert "Ramesh General Store" in audio.body  # the shop name closes the voice receipt
 
     # second simulate is a no-op
     mark = last_event_id()
@@ -292,7 +295,7 @@ def test_fix_and_remove_by_voice_and_manual_edits(client):
     r = say(client, "colgate ko ek kar do", "s-fix")
     assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 2, "Colgate": 1}
     r = say(client, "colgate hata do", "s-fix")
-    assert [ln["name"] for ln in r["cart"]["lines"]] == ["Maggi"] and "hata diya" in r["spoken_text"]
+    assert [ln["name"] for ln in r["cart"]["lines"]] == ["Maggi"] and "Colgate" in r["spoken_text"]
     # undo brings the removed line back
     assert len(say(client, "galat hai", "s-fix")["cart"]["lines"]) == 2
     # manual API
@@ -316,21 +319,58 @@ def test_exact_rules_are_not_overwritten_by_llm(client, monkeypatch):
     assert r["source"] != "sarvam" and len(r["cart"]["lines"]) == 3
 
 
-def test_llm_handles_what_the_rules_do_not_understand(client, monkeypatch):
+def test_llm_result_replaces_rules_when_it_adds_something(client, monkeypatch):
     async def fake(messages, db, tools=None, context="counter", timeout=4.0):
         calls = [ToolCall("add_to_cart", {"items": [{"name": "Maggi", "qty": 3}]}),
                  ToolCall("add_udhaar", {"customer": "Sharma ji", "amount": 100})]
         return Result(ChatOut(tool_calls=calls), "sarvam", 800)
 
+    import dataclasses
+
     import services.counter as counter_mod
     monkeypatch.setattr(counter_mod.llm, "complete_or_rules", fake)
-    r = say(client, "woh bachon wala kuch de do", "s-llm")
+    # the fast path would skip the LLM for this fully explained phrase; force the old path
+    monkeypatch.setattr(counter_mod, "settings", dataclasses.replace(counter_mod.settings, fast_path=False))
+    r = say(client, PHRASE, "s-llm")
     assert r["source"] == "sarvam"
     assert [(ln["name"], ln["qty"]) for ln in r["cart"]["lines"]] == [("Maggi", 3)]
     assert r["actions"][0]["kind"] == "add_udhaar" and r["actions"][0]["source"] == "sarvam"
     # undo restores the pre-utterance cart (empty)
     say(client, "galat hai", "s-llm")  # cancels the udhaar proposal
     assert say(client, "galat hai", "s-llm")["cart"]["lines"] == []
+
+
+def test_llm_cannot_change_quantities_the_rules_read(client, monkeypatch):
+    async def wrong(messages, db, tools=None, context="counter", timeout=4.0):
+        items = [{"name": "Maggi", "qty": 2}, {"name": "Surf Excel", "qty": 4}, {"name": "Colgate", "qty": 1}]
+        return Result(ChatOut(tool_calls=[ToolCall("add_to_cart", {"items": items})]), "sarvam", 800)
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", wrong)
+    monkeypatch.setattr(counter_mod, "settings", dataclasses.replace(counter_mod.settings, fast_path=False))
+    r = say(client, PHRASE, "s-qty")
+    assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 2, "Surf Excel": 1, "Colgate": 4}
+
+
+def test_llm_fix_on_an_empty_cart_does_not_lose_the_order(client, monkeypatch):
+    async def wrong(messages, db, tools=None, context="counter", timeout=4.0):
+        return Result(ChatOut(tool_calls=[ToolCall("remove_item", {"name": "Maggi"})]), "sarvam", 800)
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", wrong)
+    monkeypatch.setattr(counter_mod, "settings", dataclasses.replace(counter_mod.settings, fast_path=False))
+    assert len(say(client, PHRASE, "s-fix")["cart"]["lines"]) == 3
+
+
+@pytest.mark.parametrize("provider", ["sarvam", "openrouter"])
+def test_a_backup_provider_answer_is_used(client, monkeypatch, provider):
+    async def backup(messages, db, tools=None, context="counter", timeout=4.0):
+        return Result(ChatOut(tool_calls=[ToolCall("add_to_cart", {"items": [{"name": "Maggi", "qty": 3}]})]), provider, 800)
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", backup)
+    r = say(client, "woh bachon wala kuch de do", f"s-{provider}")
+    assert r["source"] == provider and [(ln["name"], ln["qty"]) for ln in r["cart"]["lines"]] == [("Maggi", 3)]
 
 
 def test_llm_failure_keeps_rules_result(client, monkeypatch):

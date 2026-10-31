@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, Optional, TypeVar
 
-Source = Literal["sarvam", "paytm", "xai", "rules", "fixture"]
+Source = Literal["sarvam", "openrouter", "rules", "fixture", "failed"]  # failed: speech that could not be transcribed
 
 T = TypeVar("T")
 

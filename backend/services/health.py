@@ -22,20 +22,22 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import settings
-from services import http, llm, sarvam, xai
+from services import http, openrouter, sarvam
 from services.types import ProviderError
 
 # last live-check result per provider, kept in memory: {name: {"ok", "latency_ms", "error", "at"}}
 _last: dict[str, dict[str, Any]] = {}
+# remaining OpenRouter credit in dollars from the last live check (None = unknown)
+_credits: Optional[float] = None
 
-PROVIDERS = ["sarvam_stt", "sarvam_tts", "sarvam_chat", "sarvam_vision", "paytm_llm", "xai", "whatsapp", "db"]
+PROVIDERS = ["sarvam_stt", "sarvam_tts", "sarvam_chat", "sarvam_vision", "openrouter_chat", "openrouter_vision", "whatsapp", "db"]
 
 _TINY_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 
 
 def _secrets() -> list[str]:
-    return [s for s in (settings.sarvam_api_key, settings.paytm_api_key, settings.xai_key, settings.wa_token,
+    return [s for s in (settings.sarvam_api_key, settings.openrouter_api_key, settings.wa_token,
                         settings.wa_app_secret) if s]
 
 
@@ -54,20 +56,23 @@ def record(provider: str, ok: bool, latency_ms: Optional[int] = None, error: Opt
 
 
 def reset() -> None:
+    global _credits
     _last.clear()
+    _credits = None
 
 
 def _has_key(name: str) -> bool:
     return {"sarvam_stt": settings.has_sarvam, "sarvam_tts": settings.has_sarvam,
             "sarvam_chat": settings.has_sarvam, "sarvam_vision": settings.has_sarvam,
-            "paytm_llm": settings.has_paytm, "xai": settings.has_xai,
+            "openrouter_chat": settings.has_openrouter, "openrouter_vision": settings.has_openrouter,
             "whatsapp": settings.has_whatsapp, "db": True}[name]
 
 
 def _model(name: str) -> Optional[str]:
     return {"sarvam_stt": settings.sarvam_stt_model, "sarvam_tts": settings.sarvam_tts_model,
             "sarvam_chat": settings.sarvam_llm_model, "sarvam_vision": settings.sarvam_vision_model,
-            "paytm_llm": settings.paytm_llm_model, "xai": settings.xai_vision_model}.get(name)
+            "openrouter_chat": settings.openrouter_model,
+            "openrouter_vision": settings.openrouter_vision_model}.get(name)
 
 
 def state_of(name: str) -> dict[str, Any]:
@@ -84,9 +89,12 @@ def state_of(name: str) -> dict[str, Any]:
         state, effective = "fallback", ("simulator" if name == "whatsapp" else "fixture")
     else:
         state, effective = "live", "live"
-    return {"name": name, "state": state, "effective": effective, "configured": _has_key(name),
-            "model": _model(name), "last_latency_ms": last["latency_ms"] if last else None,
-            "last_error": last["error"] if last else None, "last_checked": last["at"] if last else None}
+    out = {"name": name, "state": state, "effective": effective, "configured": _has_key(name),
+           "model": _model(name), "last_latency_ms": last["latency_ms"] if last else None,
+           "last_error": last["error"] if last else None, "last_checked": last["at"] if last else None}
+    if name == "openrouter_chat":
+        out["credits_remaining"] = _credits  # dollars from the last live check, else None
+    return out
 
 
 async def _timed(name: str, coro) -> None:
@@ -118,18 +126,19 @@ async def _ping_vision() -> None:
     await sarvam.vision(_TINY_PNG, "image/png", "Reply with one word.", timeout=20.0)
 
 
-async def _ping_paytm() -> None:
-    await llm._paytm_chat([{"role": "user", "content": "hi"}], None, "auto", None, 10.0)
+async def _ping_openrouter_chat() -> None:
+    await openrouter.chat([{"role": "user", "content": "hi"}], timeout=10.0, max_tokens=1)
 
 
-async def _ping_xai() -> None:
-    payload = {"model": settings.xai_vision_model, "max_tokens": 1,
-               "messages": [{"role": "user", "content": "hi"}]}
-    async with http.client(timeout=15.0) as c:
-        resp = await c.post(f"{settings.xai_base_url}/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {settings.xai_key}"}, json=payload)
-    if resp.status_code != 200:
-        raise ProviderError(http.error_text(resp), "xai", resp.status_code)
+async def _ping_openrouter_vision() -> None:
+    await openrouter.vision(_TINY_PNG, "image/png", "Reply with one word.", timeout=20.0, max_tokens=5)
+
+
+async def _read_credits() -> None:
+    """Remember the remaining OpenRouter credit (dollars); unknown stays None. Never raises."""
+    global _credits
+    info = await openrouter.credits()
+    _credits = info["remaining"] if info else None
 
 
 async def _ping_whatsapp() -> None:
@@ -161,13 +170,13 @@ async def run_live_checks(db: Session) -> list[str]:
     if settings.has_sarvam:
         jobs += [("sarvam_tts", _ping_tts(holder)), ("sarvam_chat", _ping_chat()),
                  ("sarvam_vision", _ping_vision())]
-    if settings.has_paytm:
-        jobs.append(("paytm_llm", _ping_paytm()))
-    if settings.has_xai:
-        jobs.append(("xai", _ping_xai()))
+    if settings.has_openrouter:
+        jobs += [("openrouter_chat", _ping_openrouter_chat()),
+                 ("openrouter_vision", _ping_openrouter_vision())]
     if settings.has_whatsapp:
         jobs.append(("whatsapp", _ping_whatsapp()))
-    await asyncio.gather(*[_timed(name, coro) for name, coro in jobs])
+    extra = [_read_credits()] if settings.has_openrouter else []
+    await asyncio.gather(*[_timed(name, coro) for name, coro in jobs], *extra)
     names = ["db"] + [n for n, _ in jobs]
     if holder.get("audio"):
         await _timed("sarvam_stt", _ping_stt(holder["audio"]))

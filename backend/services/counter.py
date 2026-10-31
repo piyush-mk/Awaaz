@@ -794,7 +794,10 @@ def compose_spoken(db: Session, ctx: Ctx, out: Out, cart_changed: bool) -> tuple
         named = {"items": names} if plain and len(plain) <= 3 and len(names) <= 70 else {}
         if show_total:
             if plain:
-                line = voice_style.line("items_added", session=sid, total=reprice(db, lines_now).total, **named)
+                # Spoken confirmations stay short (TTS time grows with length): read the items back only when the
+                # whole line is ~48 characters or less; otherwise the screen shows them and the voice says the total.
+                line = voice_style.line("items_added", session=sid, total=reprice(db, lines_now).total,
+                                        max_chars=48, **named)
             else:
                 line = voice_style.line("total_now", session=sid, total=reprice(db, lines_now).total)
             total_said = True
@@ -1157,11 +1160,13 @@ def _item_quantities(call: ToolCall, index: catalog.CatalogIndex) -> Optional[di
 
 
 def rules_outrank_llm(rule_calls: list[ToolCall], llm_calls: list[ToolCall], snapshot: list[dict],
-                      index: catalog.CatalogIndex) -> bool:
+                      index: catalog.CatalogIndex, norm: str) -> bool:
     """The LLM runs when the rules were not fully sure, but it must not overrule them on what they do know.
     Seen live with sarvam-105b: rules read "do maggi ek surf chaar colgate" correctly, and the model answered
     4 Surf and 1 Colgate, or tried to edit lines of an empty cart. The money rule is that a bill shows what was
-    said, so when both name the same items the tested quantity parser wins."""
+    said, so when both name the same items the tested quantity parser wins on every quantity it actually heard.
+    The LLM still fills in an item the rules heard no number for ("taas packet maggi" can become 10 Maggi), and
+    decides alone when the rules were left with a number they could not place."""
     rule_names = {canon(c.name) for c in rule_calls}
     llm_names = {canon(c.name) for c in llm_calls}
     if not rule_names or not rule_names <= FAST_CALLS:
@@ -1173,7 +1178,12 @@ def rules_outrank_llm(rule_calls: list[ToolCall], llm_calls: list[ToolCall], sna
     ruled, asked = _item_quantities(rule_calls[0], index), _item_quantities(llm_calls[0], index)
     if ruled is None or asked is None or set(ruled) != set(asked):
         return False
-    return any(asked[p] is not None and ruled[p] is not None and abs(asked[p] - ruled[p]) > 1e-6 for p in ruled)
+    outcome = quantity.parse_order_full(norm, index=index)
+    if outcome.leftover_qty:
+        return False
+    heard = {ln.product_id for ln in outcome.lines if "default_qty" not in ln.flags}
+    return any(asked[p] is not None and ruled[p] is not None and abs(asked[p] - ruled[p]) > 1e-6
+               for p in ruled if p in heard)
 
 
 async def run_utterance(db: Session, *, session_id: str, transcript: str, context: str = "counter",
@@ -1250,7 +1260,7 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
         except Exception as exc:  # noqa: BLE001  (timeout, LLMUnavailable, bad shape): keep rules result
             log.info("llm path skipped: %s", exc.__class__.__name__)
         llm_ms = int((time.perf_counter() - t_llm) * 1000)
-    if llm_calls is not None and rules_outrank_llm(rule_calls, llm_calls, snapshot, index):
+    if llm_calls is not None and rules_outrank_llm(rule_calls, llm_calls, snapshot, index, norm):
         log.info("kept the rules result over the LLM for %r", transcript[:80])
         llm_calls, llm_text, final_source, latency = None, "", ctx.source, 0
     ctx.source, ctx.latency_ms = final_source, latency

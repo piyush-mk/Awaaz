@@ -1,0 +1,33 @@
+[
+ {
+  "name": "Maggi",
+  "qty": 2
+ },
+ {
+  "name": "Sugar",
+  "qty": 1,
+  "unit": "kg"
+ },
+ {
+  "name": "Surf Excel",
+  "qty": 1
+ },
+ {
+  "name": "Arhar dal",
+  "qty": 500,
+  "unit": "g"
+ },
+ {
+  "name": "Milk",
+  "qty": 1
+ },
+ {
+  "name": "Paneer",
+  "qty": 0.5,
+  "unit": "kg"
+ },
+ {
+  "name": "Parle-G",
+  "qty": 2
+ }
+]

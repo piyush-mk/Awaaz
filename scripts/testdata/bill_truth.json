@@ -1,0 +1,87 @@
+{
+ "supplier": "Rajesh Distributors",
+ "bill_no": "RD/2526/4472",
+ "total": 4716.8,
+ "lines": [
+  {
+   "item": "Surf Excel Easy Wash 1kg",
+   "qty": 10,
+   "rate": 45.0,
+   "mrp": 52.0,
+   "batch": "SE2609B",
+   "expiry": "06/2028",
+   "free": 0,
+   "scheme": "Buy 10 Get 1 Free"
+  },
+  {
+   "item": "Maggi 2-Min Noodles 70g",
+   "qty": 24,
+   "rate": 11.2,
+   "mrp": 14.0,
+   "batch": "MG2508",
+   "expiry": "03/2027",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Colgate Strong Teeth 100g",
+   "qty": 12,
+   "rate": 38.0,
+   "mrp": 46.0,
+   "batch": "CG2607",
+   "expiry": "05/2028",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Parle-G Gold 100g",
+   "qty": 48,
+   "rate": 8.5,
+   "mrp": 10.0,
+   "batch": "PG2610",
+   "expiry": "02/2027",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Tata Salt 1kg",
+   "qty": 20,
+   "rate": 24.0,
+   "mrp": 28.0,
+   "batch": "TS2609",
+   "expiry": "09/2028",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Bournvita 500g",
+   "qty": 6,
+   "rate": 215.0,
+   "mrp": 250.0,
+   "batch": "BV2606",
+   "expiry": "12/2026",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Aashirvaad Atta 5kg",
+   "qty": 4,
+   "rate": 272.0,
+   "mrp": 320.0,
+   "batch": "AA2610",
+   "expiry": "04/2027",
+   "free": 0,
+   "scheme": null
+  },
+  {
+   "item": "Vim Bar 200g",
+   "qty": 24,
+   "rate": 11.5,
+   "mrp": 15.0,
+   "batch": "VM2608",
+   "expiry": "08/2028",
+   "free": 0,
+   "scheme": null
+  }
+ ]
+}

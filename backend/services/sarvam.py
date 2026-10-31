@@ -82,6 +82,8 @@ async def _stt_call(audio_bytes: bytes, filename: str, language: str, keyterms: 
     # By extension, not mimetypes: that can answer video/webm, or nothing at all on Windows.
     mime = STT_MIME.get(filename.rsplit(".", 1)[-1].lower(), "audio/webm")
     data = {"model": settings.sarvam_stt_model, "language_code": language}
+    if settings.sarvam_stt_mode:
+        data["mode"] = settings.sarvam_stt_mode
     terms = [t[:64] for t in keyterms[:50] if t]
     if terms and settings.sarvam_stt_model.startswith("saaras:v4"):  # the API rejects keyterms on older models
         data["keyterms"] = json.dumps(terms, ensure_ascii=False)

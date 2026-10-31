@@ -352,6 +352,28 @@ def test_llm_cannot_change_quantities_the_rules_read(client, monkeypatch):
     assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 2, "Surf Excel": 1, "Colgate": 4}
 
 
+def test_llm_fills_in_a_number_the_rules_did_not_hear(client, monkeypatch):
+    async def right(messages, db, tools=None, context="counter", timeout=4.0):
+        items = [{"name": "Maggi", "qty": 10}, {"name": "Colgate", "qty": 5}]
+        return Result(ChatOut(tool_calls=[ToolCall("add_to_cart", {"items": items})]), "sarvam", 800)
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", right)
+    r = say(client, "zzqx packet Maggi aur paanch Colgate", "s-fill")
+    assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 10, "Colgate": 5}
+
+
+def test_llm_cannot_move_a_number_the_rules_heard(client, monkeypatch):
+    async def wrong(messages, db, tools=None, context="counter", timeout=4.0):
+        items = [{"name": "Maggi", "qty": 2}, {"name": "Surf Excel", "qty": 4}, {"name": "Colgate", "qty": 1}]
+        return Result(ChatOut(tool_calls=[ToolCall("add_to_cart", {"items": items})]), "sarvam", 800)
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", wrong)
+    r = say(client, "Do Maggi zzqx Surf Excel chaar Colgate", "s-move")
+    assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 2, "Surf Excel": 1, "Colgate": 4}
+
+
 def test_llm_fix_on_an_empty_cart_does_not_lose_the_order(client, monkeypatch):
     async def wrong(messages, db, tools=None, context="counter", timeout=4.0):
         return Result(ChatOut(tool_calls=[ToolCall("remove_item", {"name": "Maggi"})]), "sarvam", 800)

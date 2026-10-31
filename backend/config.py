@@ -42,6 +42,9 @@ class Settings:
     sarvam_api_key: str = ""
     sarvam_base_url: str = "https://api.sarvam.ai"
     sarvam_stt_model: str = "saaras:v4"
+    # translit = Roman-letter Hinglish ("Do Maggi, ek Surf Excel aur chaar Colgate."), which the rules
+    # parser fully understands, so plain orders take the fast path. "transcribe" = Devanagari. Blank means this default.
+    sarvam_stt_mode: str = "translit"
     sarvam_llm_model: str = "sarvam-105b"
     sarvam_tts_model: str = "bulbul:v4-flash"
     sarvam_tts_speaker: str = "simran_enhi_customer"
@@ -132,6 +135,7 @@ def load_settings() -> Settings:
         sarvam_api_key=_env("SARVAM_API_KEY"),
         sarvam_base_url=_env("SARVAM_API_BASE_URL", default="https://api.sarvam.ai").rstrip("/"),
         sarvam_stt_model=_env("SARVAM_STT_MODEL", default="saaras:v4"),
+        sarvam_stt_mode=_env("SARVAM_STT_MODE", default="translit"),
         sarvam_llm_model=_env("SARVAM_LLM_MODEL", default="sarvam-105b"),
         sarvam_tts_model=_env("SARVAM_TTS_MODEL", default="bulbul:v4-flash"),
         sarvam_tts_speaker=_env("SARVAM_TTS_SPEAKER", default="simran_enhi_customer"),

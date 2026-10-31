@@ -36,7 +36,7 @@ def normalize(text: str) -> str:
     t = t.replace("₹", " rupaye ")
     t = re.sub(r"(?<=\d)[.,](?=\d{3}\b)", "", t)  # 1,200 -> 1200
     t = re.sub(r"[^\w\sऀ-ॿ.]", " ", t)
-    t = t.replace("_", " ")
+    t = re.sub(r"[।॥_]", " ", t)  # the Hindi full stop is inside the Devanagari range kept above
     t = re.sub(r"(?<!\d)\.|\.(?!\d)", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 

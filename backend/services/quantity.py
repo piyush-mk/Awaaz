@@ -41,10 +41,14 @@ ikhattar 71|bahattar 72|tihattar 73|chauhattar 74|pachhattar 75|chhihattar 76|sa
 athattar 78|unasi 79|assi 80|ikyasi 81|bayasi 82|tirasi 83|chaurasi 84|pachasi 85|
 chhiyasi 86|sattasi 87|atthasi 88|navasi 89|nabbe 90|ikyanve 91|banve 92|tiranve 93|
 chauranve 94|pachanve 95|chhiyanve 96|sattanve 97|atthanve 98|ninyanve 99|
+dus 10|daas 10|taas 10|gyaarah 11|gyara 11|baarah 12|baara 12|tera 13|pandra 15|sola 16|satra 17|athara 18|
+athaarah 18|unnees 19|ikkees 21|chaubees 24|chovis 24|pachees 25|pachchees 25|chaalees 40|
 one 1|two 2|three 3|four 4|five 5|six 6|seven 7|eight 8|nine 9|ten 10|eleven 11|twelve 12|
 fifteen 15|twenty 20|thirty 30|forty 40|fifty 50|sixty 60|seventy 70|eighty 80|ninety 90
 """
 _NUM_DEVA = """
+वन 1|टू 2|थ्री 3|फोर 4|फाइव 5|सिक्स 6|सेवन 7|एट 8|नाइन 9|टेन 10|
+दास 10|टास 10|तेरा 13|सोला 16|
 एक 1|दो 2|डू 2|दू 2|तीन 3|चार 4|पांच 5|पाँच 5|छह 6|छः 6|छे 6|सात 7|आठ 8|नौ 9|दस 10|ग्यारह 11|बारह 12|
 तेरह 13|चौदह 14|पंद्रह 15|पन्द्रह 15|सोलह 16|सत्रह 17|अठारह 18|उन्नीस 19|बीस 20|इक्कीस 21|
 बाईस 22|तेईस 23|चौबीस 24|पच्चीस 25|छब्बीस 26|सत्ताईस 27|अट्ठाईस 28|उनतीस 29|तीस 30|
@@ -105,10 +109,10 @@ STOP_WORDS = {
     "dijie", "diji", "karo", "kijiye", "please", "plz", "wala", "wali", "wale", "sirf", "bas",
     "total", "kitna", "hua", "hai", "of", "the", "a", "an", "also", "mein", "me", "se", "wo",
     "woh", "ye", "yeh", "jara", "zara", "thoda", "aap", "dukan", "ji", "jee", "lena", "lo",
-    "dedo", "denge", "hoga", "chaiye", "भैया", "भाई", "और", "भी", "चाहिए", "दीजिए", "दे", "देना",
+    "de", "dedo", "denge", "hoga", "chaiye", "भैया", "भाई", "और", "भी", "चाहिए", "दीजिए", "दे", "देना",
     "मुझे", "में", "से", "जी", "बस", "है",
 }
-VERB_DE = {"de", "dena", "dijiye"}
+VERB_DE = {"de", "dena", "dijiye", "दे", "देना", "दीजिए"}
 
 CHECKOUT_PHRASES = ("kitna hua", "kitne hue", "total batao", "bill banao", "bill bana do",
                     "bas itna", "bas itna hi", "bas ho gaya", "hisaab", "total kitna",
@@ -161,6 +165,7 @@ class ParseOutcome:
     unmatched: list[dict]
     normalized: str
     explained: bool = False  # the rules account for every word: safe to skip the LLM (see counter fast path)
+    leftover_qty: bool = False  # a number was heard that no item took, so the rules know they misread something
 
 
 _DIGIT = re.compile(r"^(\d+(?:\.\d+)?)([a-z]+)?$")
@@ -217,7 +222,7 @@ def _tokenize(words: list[str], index: CatalogIndex) -> list[Tok]:
             continue
         w = words[i]
         t = _classify(w)
-        if t.kind == "num" and w == "do" and i > 0 and words[i - 1] in VERB_DE:
+        if t.kind == "num" and w in ("do", "दो") and i > 0 and words[i - 1] in VERB_DE:
             t = Tok("stop", None, w)  # "de do" = give, not two
         toks.append(t)
         i += 1
@@ -316,7 +321,14 @@ def _elements(toks: list[Tok]) -> list[Elem]:
         t = toks[i]
         if t.kind == "prod":
             flush_unknown()
-            elems.append(Elem("P", products=list(t.val), score=t.score, raw=t.raw, pos=len(elems)))  # type: ignore[arg-type]
+            prev = elems[-1] if elems else None
+            ids = {p.id for p in t.val}  # type: ignore[union-attr]
+            if prev is not None and prev.kind == "P" and ids & {p.id for p in prev.products}:
+                # one item heard in two pieces ("Tata नामक"), not two mentions that would add up
+                prev.score = max(prev.score, t.score)
+                prev.raw = f"{prev.raw} {t.raw}"
+            else:
+                elems.append(Elem("P", products=list(t.val), score=t.score, raw=t.raw, pos=len(elems)))  # type: ignore[arg-type]
             i += 1
         elif t.kind in ("num", "mult", "frac", "pre", "numunit", "numrupee"):
             flush_unknown()
@@ -355,6 +367,16 @@ def _neighbour_qty(elems: list[Elem], pos: int, step: int) -> Optional[Qty]:
             return e.qty
         return None
     return None
+
+
+def _right_qty_is_for_next_item(elems: list[Elem], pos: int) -> bool:
+    """In a quantity-first sentence, is the number to the right of this item the next item's own?
+    "do maggi surf teen colgate": teen belongs to Colgate, and Surf was said with no number. It stays free to
+    take when the next item has its own number after it ("do maggi, chawal paanch kilo, tel do litre")."""
+    content = [e for e in elems[pos + 1:] if e.kind != "U"]
+    if len(content) < 2 or content[0].kind != "Q" or content[1].kind != "P":
+        return False
+    return not (len(content) > 2 and content[2].kind == "Q")
 
 
 def _spoken_kind(q: Optional[Qty]) -> str:
@@ -484,8 +506,11 @@ def parse_order_full(text: str, db: Optional[Session] = None, index: Optional[Ca
     toks = _tokenize(norm.split(), index)
     elems = _elements(toks)
 
-    first = next((e for e in elems if e.kind in ("Q", "P")), None)
-    qty_after_style = first is not None and first.kind == "P"
+    content = [e for e in elems if e.kind in ("Q", "P")]
+    # "maggi paanch" puts the number after the item. An unknown word before the first item is usually a number
+    # that was misheard ("taas packet maggi, paanch colgate"), so then only a sentence ending on a number counts.
+    qty_after_style = bool(content) and content[0].kind == "P" and (
+        elems[0].kind != "U" or content[-1].kind == "Q")
 
     lines: list[CartLine] = []
     ambiguous = False
@@ -494,6 +519,8 @@ def parse_order_full(text: str, db: Optional[Session] = None, index: Optional[Ca
             continue
         left = _neighbour_qty(elems, e.pos, -1)
         right = _neighbour_qty(elems, e.pos, +1)
+        if not qty_after_style and left is None and _right_qty_is_for_next_item(elems, e.pos):
+            right = None
         chosen = (right or left) if qty_after_style else (left or right)
         if len({p.sell_mode for p in e.products}) > 1 and _spoken_kind(chosen) in ("bare", "none"):
             ambiguous = True  # "do chawal": loose or packed? let the LLM look at it
@@ -514,8 +541,9 @@ def parse_order_full(text: str, db: Optional[Session] = None, index: Optional[Ca
                 break
         if name and e.qty.kind != "amount":
             unmatched.append({"name": name, "qty": e.qty.value, "raw": f"{e.qty.raw} {name}".strip()})
+    leftover = any(e.kind == "Q" and e.qty is not None and not e.qty.consumed for e in elems)
     return ParseOutcome(_merge(lines), unmatched, norm,
-                        _explained(elems, lines, unmatched, ambiguous))
+                        _explained(elems, lines, unmatched, ambiguous), leftover)
 
 
 FAST_MIN_SCORE = 85.0

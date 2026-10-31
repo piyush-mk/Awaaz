@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from services import insights, llm, sarvam, tts_cache
+from services import insights, llm, tts_cache, voice_style
 from services.insights import days_phrase, fmt_mult, hindi_count, inr
 from services.types import LLMUnavailable, ProviderError, Timer
 
@@ -61,7 +61,7 @@ def _stock_sentence(facts: dict) -> Optional[str]:
         mult = fmt_mult(first["multiplier"])
         name = first["short_name"]
         if cover is not None and cover <= insights.COVER_ALERT_DAYS + 1:
-            return (f"{fest['name']} se pehle {name} {days_phrase(cover)} ka bacha hai,"
+            return (f"Dekhiye, {fest['name']} se pehle {name} {days_phrase(cover)} ka bacha hai,"
                     f" aur demand {mult} guna ho sakti hai.")
         return (f"{fest['name']} {fest['date_short']} ko hai, {name} ki demand {mult} guna ho sakti hai;"
                 f" abhi se order bana lein.")
@@ -98,12 +98,16 @@ def _extra_sentences(facts: dict) -> list[str]:
     return out
 
 
+_FILLERS = ("Aur haan, ", "Ek baat aur, ", "Aur ji, ")  # glue between the sentences, like a person talking
+
+
 def template_sentences(facts: dict) -> list[str]:
     sentences = [_sale_sentence(facts)]
     stock = _stock_sentence(facts)
     if stock:
         sentences.append(stock)
-    sentences.extend(_extra_sentences(facts)[:4 - len(sentences)])
+    extras = _extra_sentences(facts)[:4 - len(sentences)]
+    sentences.extend(f"{filler}{line}" for filler, line in zip(_FILLERS, extras))
     return sentences[:4]
 
 
@@ -176,7 +180,11 @@ SYSTEM_PROMPT = (
     "3. Jo facts mein nahi hai woh mat likho. Naya product, naam ya wajah mat banao.\n"
     "4. Pehla vaakya kal ki sale aur pichle hafte se tulna. Phir sabse zaroori cheez: tyohaar se pehle jo "
     "maal kam padne wala hai. Phir ek ya do aur zaroori baatein (udhaar, missed sale, expiry, galla).\n"
-    "5. Bullet, emoji, heading ya list mat banao. Sirf seedhe vaakya.\n"
+    "5. Bullet, emoji, heading, list ya dash (—) mat banao. Sirf seedhe vaakya.\n"
+    "6. Awaaz ek garmjoshi wale dukaan ke munim ki ho: chhote vaakya, ek vaakya mein ek hi baat. Beech mein "
+    "'dekhiye', 'aur haan', 'ji' jaise shabd glue ki tarah (zyada nahi). Sidhe 'aap' se baat karo. Hinglish "
+    "roman mein, English item ke naam waise hi. Halka mazaak kabhi kabhi theek hai, par paison ya galti par "
+    "kabhi nahi, aur kisi ka mazaak nahi.\n"
     "Style ka namoona: 'Kal ₹8,420 ki sale hui, pichle Budhvaar se 12% zyada. Dhanteras se pehle ghee sirf do din "
     "ka bacha hai.' (namoone ke numbers copy mat karo; apne facts ke numbers use karo.)"
 )
@@ -217,7 +225,7 @@ async def llm_sentences(facts: dict) -> tuple[Optional[str], str, int]:
 
 def spoken_version(text: str) -> str:
     """Text as it should be read aloud: rupee amounts via speak_rupees, % as 'percent'."""
-    return sarvam.prepare_tts_text(text).replace("%", " percent")
+    return voice_style.prepare_for_tts(text)
 
 
 async def audio_for(text: str) -> dict[str, Any]:

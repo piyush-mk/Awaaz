@@ -12,7 +12,7 @@ import PaidView from '../../components/app/PaidView'
 import SourceChip from '../../components/app/SourceChip'
 import { Btn, Chip, inputCls } from '../../components/app/ui'
 import useRecorder from '../../hooks/useRecorder'
-import { speak, stopSpeaking } from '../../lib/audio'
+import { useSpeechState } from '../../hooks/useSpeech'
 import { inr } from '../../lib/format'
 import {
   addCartLines,
@@ -30,10 +30,14 @@ import {
   addMissedSale,
 } from '../../api/client'
 
+/** Key for payment announcements: one spoken line per order, even if HTTP and SSE both deliver it. */
+const moneyKey = (d) => d?.speech?.key ?? (d?.order_id ? `pay:${d.order_id}` : undefined)
+
 const EXAMPLES = ['do maggi ek surf excel chaar colgate', 'bees rupaye ki cheeni', 'bas kitna hua']
 
 export default function Counter() {
-  const { sessionId, showToast, showError } = useApp()
+  const { sessionId, showToast, showError, speech } = useApp()
+  const speechState = useSpeechState()
 
   const [cart, setCart] = useState(null)
   const [stage, setStage] = useState('cart') // cart | pay | paid
@@ -42,6 +46,7 @@ export default function Counter() {
   const [pending, setPending] = useState([])
   const [last, setLast] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [understanding, setUnderstanding] = useState(false) // request in flight: "Samajh raha hoon..."
   const [text, setText] = useState('')
   const [showText, setShowText] = useState(false)
   const [customerOpen, setCustomerOpen] = useState(false)
@@ -57,7 +62,8 @@ export default function Counter() {
   checkoutRef.current = checkout
   const paidOrders = useRef(new Set())
   const queue = useRef(Promise.resolve())
-  const recRef = useRef(null)
+  const ackRef = useRef(null) // the instant "ji" token of the utterance that just stopped
+  const understandingTimer = useRef(null)
 
   // ----- cart state ---------------------------------------------------------------------------------------
 
@@ -75,15 +81,19 @@ export default function Counter() {
     }
   }, [applyCart, sessionId, showError])
 
-  const say = useCallback(async (reply) => {
-    const rec = recRef.current
-    rec?.setSuspended(true)
-    try {
-      await speak(reply)
-    } finally {
-      setTimeout(() => rec?.setSuspended(false), 350)
-    }
+  // Everything spoken goes through the one speech manager: queued, de-duplicated by key, never overlapping.
+  const say = useCallback((reply, opts) => speech.speak(reply, opts), [speech])
+
+  const startUnderstanding = useCallback(() => {
+    setUnderstanding(true)
+    clearTimeout(understandingTimer.current)
+    understandingTimer.current = setTimeout(() => setUnderstanding(false), 20000) // never stuck
   }, [])
+  const stopUnderstanding = useCallback(() => {
+    clearTimeout(understandingTimer.current)
+    setUnderstanding(false)
+  }, [])
+  useEffect(() => () => clearTimeout(understandingTimer.current), [])
 
   const showCheckout = useCallback(
     (data) => {
@@ -95,9 +105,10 @@ export default function Counter() {
         paidOrders.current.add(data.order_id)
         setPaid({ ...data, amount: data.total })
         setStage('paid')
-        say(data)
+        say(data, { kind: 'money', key: moneyKey(data) })
       } else {
         setStage('pay')
+        if (data.speech) say(data)
       }
     },
     [say],
@@ -110,13 +121,13 @@ export default function Counter() {
       if (orderId) paidOrders.current.add(orderId)
       setPaid({ ...data, amount: data.amount ?? data.invoice?.total, receipt_url: data.receipt_url || data.invoice?.receipt_url })
       setStage('paid')
-      say(data)
+      say(data, { kind: 'money', key: moneyKey(data) })
     },
     [say],
   )
 
   const newBill = useCallback(async () => {
-    stopSpeaking()
+    speech.newTurn() // money announcements are never cut
     try {
       applyCart(await clearCart(sessionId))
     } catch (e) {
@@ -129,7 +140,7 @@ export default function Counter() {
     setParchi(null)
     setPending([])
     setLast(null)
-  }, [applyCart, sessionId, showError])
+  }, [applyCart, sessionId, showError, speech])
 
   // First load: cart, open proposals, and recovery of a bill that was already created.
   useEffect(() => {
@@ -163,7 +174,10 @@ export default function Counter() {
   // ----- live events --------------------------------------------------------------------------------------
 
   useStoreEvent('cart_updated', (d) => {
-    if (d.session_id === sessionId && stageRef.current === 'cart') applyCart(d.cart)
+    if (d.session_id === sessionId && stageRef.current === 'cart') {
+      applyCart(d.cart)
+      stopUnderstanding() // the cart is on screen: "Samajh raha hoon..." is done
+    }
   })
   useStoreEvent('checkout', (d) => {
     if (d.session_id === sessionId && stageRef.current === 'cart') showCheckout(d)
@@ -198,23 +212,28 @@ export default function Counter() {
   )
 
   const submit = useCallback(
-    async ({ audio, filename, text: typed }) => {
+    async ({ audio, filename, text: typed, ack }) => {
       setBusy(true)
       try {
         const res = await sendUtterance({ audio, filename, text: typed, context: 'counter', sessionId })
+        // Render the cart from the HTTP reply right now; speech never gates it (it may still be `pending`).
+        ack?.settle() // a reply faster than ~250 ms is not talked over by the ack
         setLast(res)
         if (res.cart) applyCart(res.cart)
         else refreshCart()
+        stopUnderstanding()
         processActions(res.actions)
         if (res.missed?.length) showToast(`${res.missed.join(', ')} note kiya`, 'warning')
         if (!res.actions?.some((a) => a.status === 'confirmed' && a.result?.order_id)) say(res)
       } catch (e) {
+        ack?.cancel()
+        stopUnderstanding()
         showError(e)
       } finally {
         setBusy(false)
       }
     },
-    [applyCart, processActions, refreshCart, say, sessionId, showError, showToast],
+    [applyCart, processActions, refreshCart, say, sessionId, showError, showToast, stopUnderstanding],
   )
 
   const enqueue = useCallback(
@@ -225,9 +244,33 @@ export default function Counter() {
   )
 
   const rec = useRecorder({
-    onAudio: (blob, meta) => enqueue({ audio: blob, filename: meta.filename }),
+    // The moment recording stops (release, tap-to-send, hands-free silence cut): instant "ji", before any network.
+    onStop: () => {
+      ackRef.current = speech.ack()
+      startUnderstanding()
+    },
+    onAudio: (blob, meta) => {
+      const token = ackRef.current && Date.now() - ackRef.current.startedAt < 8000 ? ackRef.current : null
+      ackRef.current = null
+      enqueue({ audio: blob, filename: meta.filename, ack: token })
+    },
   })
-  recRef.current = rec
+
+  // Pressing the mic while a reply is still playing cuts it (short fade); money announcements finish.
+  useEffect(() => {
+    if (rec.recording) speech.newTurn()
+  }, [rec.recording, speech])
+
+  // Hands-free must never hear its own acks or replies: pause the VAD while anything plays, resume 250 ms after.
+  useEffect(() => {
+    if (speechState.speaking) {
+      rec.setSuspended(true)
+      return undefined
+    }
+    const t = setTimeout(() => rec.setSuspended(false), 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speechState.speaking, rec.handsFree])
 
   // Stop listening when this screen closes or a bill is being paid.
   useEffect(() => {
@@ -245,6 +288,8 @@ export default function Counter() {
     const t = (phrase ?? text).trim()
     if (!t) return
     setText('')
+    speech.newTurn() // typed input: no ack, but the old reply stops
+    startUnderstanding()
     enqueue({ text: t })
   }
 
@@ -382,7 +427,7 @@ export default function Counter() {
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Aapne kaha</div>
                 <div className="font-hindi text-lg font-bold text-ink leading-snug">&ldquo;{last.transcript}&rdquo;</div>
               </div>
-              <SourceChip source={last.source} latency={last.latency_ms} demo={last.demo_mode && last.source === 'fixture'} />
+              <SourceChip source={last.source} latency={last.latency_ms} timings={last.timings} demo={last.demo_mode && last.source === 'fixture'} />
             </div>
             {last.spoken_text && <p className="mt-1 font-hindi text-base text-ink-3">{last.spoken_text}</p>}
             {last.errors?.length > 0 && <p className="mt-1 text-sm text-stock-red">{last.errors.join('; ')}</p>}
@@ -479,16 +524,16 @@ export default function Counter() {
             </div>
             <div className="flex flex-col items-center gap-1">
               <MicOrb rec={rec} busy={busy && !rec.handsFree} />
-              <span className="text-xs font-medium text-ink-3 h-4">
+              <span className="text-xs font-medium text-ink-3 h-4" role="status" aria-live="polite" data-stage={rec.recording ? 'listening' : understanding ? 'understanding' : 'idle'}>
                 {rec.error ||
-                  (busy
-                    ? 'Samajh raha hoon...'
-                    : rec.handsFree
-                      ? rec.phase === 'speech'
-                        ? 'Sun liya, ruk kar bhejunga...'
-                        : 'Sun raha hoon...'
-                      : rec.recording
-                        ? 'Chhodein ya dobara tap karein'
+                  (rec.recording
+                    ? 'Sun raha hoon...'
+                    : understanding
+                      ? 'Samajh raha hoon...'
+                      : rec.handsFree
+                        ? rec.phase === 'speech'
+                          ? 'Sun liya, ruk kar bhejunga...'
+                          : 'Sun raha hoon...'
                         : rec.supported
                           ? 'Dabayein aur bolein'
                           : 'Mic nahi hai, type karein')}

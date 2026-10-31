@@ -45,7 +45,11 @@ OpenRouter is a backup with limited credit: temperature 0, small `max_tokens`, o
 | `on` | Never call external APIs |
 | `off` | Never use fixtures; provider errors surface |
 
-Voice utterances run two paths in parallel: the rules parser (milliseconds) updates the cart immediately, and the LLM tool-calling result (4 second budget) replaces it when it arrives.
+Voice utterances: the rules parser (milliseconds) updates the cart immediately. When it fully explains the utterance (every word is a known item, quantity, unit, filler or command, no udhaar/payment/price/undo words) the LLM is skipped (`source: "rules"`, switch `FAST_PATH=off` restores the old behaviour); otherwise the LLM tool-calling result (4 second budget) replaces the rules result when it arrives.
+
+### Speech without waiting
+
+Replies are worded by `services/voice_style.py` (short warm Hinglish, several variants per situation, never the same line twice in a row, light humour about one reply in five and never on money or errors) and normalised for Bulbul by `prepare_for_tts` (amounts as "249 rupaye", units and symbols as words). Responses never wait for TTS: `POST /api/agent/utterance`, checkout and payment carry `speech {text, pace, pending, key, audio_url, ack}`. A cached clip comes back with `pending: false`; otherwise one background task per key generates it (6 second bound, duplicates coalesce) and publishes `speech_ready {session_id, key, audio_url|null, text, source}` on the `store` channel (`audio_url: null` means speak `text` with browser speech). `GET /api/voice/phrases` serves a warmed bank of about 25 short acknowledgements ("Ji.", "Ho gaya.") that `speech.ack` points at; the response also has `timings {stt_ms, parse_ms, llm_ms, total_ms}`.
 
 ## Data model (backend/models.py)
 
@@ -76,7 +80,7 @@ Legacy endpoints from the first prototype (`/api/voice`, `/api/inventory`, `/api
 
 ## Events
 
-Channel `store`: `cart_updated`, `utterance`, `action_proposed`, `action_resolved`, `checkout`, `payment_received`, `brief_ready`, `khata_updated`, `khata_disputed`, `wa_order`, `postpaid_approved`, `galla_closed`, `stock_updated`, `reorder_sent`, `demo_reset`. Channel `wa`: `wa_message`, `wa_status`.
+Channel `store`: `cart_updated`, `utterance`, `action_proposed`, `action_resolved`, `checkout`, `payment_received`, `brief_ready`, `speech_ready`, `khata_updated`, `khata_disputed`, `wa_order`, `postpaid_approved`, `galla_closed`, `stock_updated`, `reorder_sent`, `demo_reset`. Channel `wa`: `wa_message`, `wa_status`.
 
 ## Testing
 

@@ -1,3 +1,5 @@
+import { getSpeechManager } from './speechManager'
+
 export async function playBase64Audio(audioBase64, mimeType = 'audio/mpeg') {
   if (!audioBase64) return false
 
@@ -87,70 +89,34 @@ export async function speakWithFallback(text, audioBase64, language = 'hi') {
 }
 
 // ---------------------------------------------------------------------------
-// Added for the merchant app: play a hosted mp3 (audio_url) and one speak() entry point.
+// Merchant app: every spoken reply goes through the one speech manager (lib/speechManager.js), so nothing
+// can overlap or double-speak. speakWithFallback above is only kept for the legacy pages and WhatsApp bubbles.
 // ---------------------------------------------------------------------------
 
-let currentAudio = null
-
-function localUrl(url) {
-  try {
-    const u = new URL(url, window.location.origin)
-    if (/^\/(api|r|k)\//.test(u.pathname)) return u.pathname + u.search
-  } catch (_) {
-    // keep as is
-  }
-  return url
-}
-
-export async function playUrl(url) {
-  if (!url) return false
-  stopSpeaking()
-  const audio = new Audio(localUrl(url))
-  currentAudio = audio
-  audio.preload = 'auto'
-  await audio.play()
-  await new Promise((resolve) => {
-    audio.onended = resolve
-    audio.onerror = resolve
-    audio.onpause = resolve
-  })
-  if (currentAudio === audio) currentAudio = null
-  return true
-}
-
+/** Stop whatever the app is saying (also queued lines). */
 export function stopSpeaking() {
   try {
-    if (currentAudio) {
-      currentAudio.pause()
-      currentAudio = null
-    }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel()
+    getSpeechManager().cancel()
   } catch (_) {
     // ignore
   }
 }
 
 /**
- * Speak a server reply. Prefers the Bulbul mp3 (audio_url, or audio_base64), falls back to the browser voice.
- * `reply` is any API response: { spoken_text | text | message_hi, audio_url, audio_base64 }.
- * Never throws; resolves when playback ends.
+ * Speak a server reply through the manager. `reply` is any API response: a string, { speech }, or
+ * { spoken_text | text | message_hi, audio_url, audio_base64 }. Never throws; resolves when playback ends
+ * (true if something was played). A user-initiated call replays even if the same text was spoken a moment ago.
  */
-export async function speak(reply, language = 'hi') {
+export async function speak(reply, language = 'hi', opts = {}) {
   if (!reply) return false
-  const text = typeof reply === 'string' ? reply : reply.spoken_text || reply.text || reply.message_hi || ''
-  const url = typeof reply === 'string' ? null : reply.audio_url || reply.url
-  const b64 = typeof reply === 'string' ? null : reply.audio_base64
   try {
-    if (url) {
-      try {
-        if (await playUrl(url)) return true
-      } catch (_) {
-        // fall through
-      }
-    }
-    if (!text && !b64) return false
-    return await speakWithFallback(text, b64, language)
+    return await getSpeechManager().speak(reply, { lang: language, replay: true, ...opts })
   } catch (_) {
     return false
   }
+}
+
+export async function playUrl(url) {
+  if (!url) return false
+  return speak({ audio_url: url })
 }

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas import ParsedItem, TTSRequest, TTSResponse, VoiceParseResponse
-from services import catalog, quantity, sarvam, tts_cache
+from services import catalog, phrases, quantity, sarvam, tts_cache
 
 router = APIRouter()
 
@@ -63,3 +63,15 @@ def cached_tts(key: str):
         raise HTTPException(status_code=404, detail="not found")
     return Response(content=audio, media_type="audio/mpeg",
                     headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/phrases")
+def phrase_bank():
+    """The instant-acknowledgement phrase bank: {ready, phrases: {id: {text, audio_url|null, kind}}}.
+    `audio_url` is null until the clip is cached (and always null without TTS: speak `text` with
+    browser speech). `ready` is true when every clip is available. Asking while some are missing
+    nudges the background warm-up (a no-op under DEMO_MODE=on or without a key)."""
+    out = phrases.view()
+    if not out["ready"]:
+        phrases.start_warmup()
+    return out

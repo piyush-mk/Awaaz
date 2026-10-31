@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  *    detector on a Web Audio AnalyserNode cuts the stream into utterances. No WASM, no dependency.
  *
  * Every finished utterance is handed to `onAudio(blob, { filename, mode, durationMs })`.
+ * `onStop({ mode, durationMs })` fires the instant an utterance that will be delivered stops (button release,
+ * tap-to-send, or the hands-free silence cut), before the blob is assembled: use it for the instant "ji".
  *
  * VAD rules (all overridable through `vad`):
  *   speech starts after ~100 ms above the threshold; threshold = max(minRms, noiseFloor * noiseMult)
@@ -50,7 +52,7 @@ export function recorderSupported() {
   )
 }
 
-export default function useRecorder({ onAudio, vad } = {}) {
+export default function useRecorder({ onAudio, onStop, vad } = {}) {
   const [mode, setMode] = useState('idle') // idle | ptt | handsfree
   const [phase, setPhase] = useState('idle') // idle | listening | speech | recording
   const [level, setLevel] = useState(0)
@@ -58,6 +60,8 @@ export default function useRecorder({ onAudio, vad } = {}) {
 
   const onAudioRef = useRef(onAudio)
   onAudioRef.current = onAudio
+  const onStopRef = useRef(onStop)
+  onStopRef.current = onStop
   const cfg = useRef({ ...VAD_DEFAULTS, ...(vad || {}) })
 
   // mutable engine state (never rendered)
@@ -171,6 +175,7 @@ export default function useRecorder({ onAudio, vad } = {}) {
     setPhase('idle')
     setLevel(0)
     const durationMs = performance.now() - e.pttStart
+    if (durationMs > 300) onStopRef.current?.({ mode: 'ptt', durationMs })
     const blob = await stopRecorder()
     releaseStream()
     if (blob && durationMs > 300) deliver(blob, { filename: `utterance.${extFor(blob.type)}`, mode: 'ptt', durationMs })
@@ -213,6 +218,7 @@ export default function useRecorder({ onAudio, vad } = {}) {
     e.loudRun = 0
     e.voicedMs = 0
     setPhase('listening')
+    if (voiced >= c.minSpeechMs) onStopRef.current?.({ mode: 'handsfree', durationMs })
     const pending = stopRecorder()
     if (e.mode === 'handsfree') startRecorder()
     const blob = await pending

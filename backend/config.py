@@ -45,6 +45,7 @@ class Settings:
     sarvam_llm_model: str = "sarvam-105b"
     sarvam_tts_model: str = "bulbul:v3"
     sarvam_tts_speaker: str = "ritu"
+    sarvam_tts_sample_rate: int = 16000  # mp3 at 16 kHz: smaller file, same latency
     sarvam_vision_model: str = "gemma4"
 
     # OpenRouter (backup for chat/tool calling and vision, OpenAI-compatible; limited credit)
@@ -66,6 +67,8 @@ class Settings:
 
     # Behaviour
     demo_mode: str = "auto"
+    fast_path: bool = True  # FAST_PATH=off forces the LLM reconcile pass on every utterance
+    voice_pronunciation_fixes: bool = True  # VOICE_PRONUNCIATION_FIXES=off disables the brand table
     database_url: str = f"sqlite:///{BACKEND_DIR / 'db.sqlite'}"
     cache_dir: Path = field(default_factory=lambda: BACKEND_DIR / ".cache")
 
@@ -107,6 +110,22 @@ def _normalise_demo_mode(raw: str) -> str:
     return "auto"
 
 
+def _flag(raw: str, default: bool) -> bool:
+    value = raw.strip().lower()
+    if value in ("0", "off", "false", "no"):
+        return False
+    if value in ("1", "on", "true", "yes"):
+        return True
+    return default
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(_env(name, default=str(default)))
+    except ValueError:
+        return default
+
+
 def load_settings() -> Settings:
     """Read settings from the environment (call again to pick up changes)."""
     return Settings(
@@ -116,6 +135,7 @@ def load_settings() -> Settings:
         sarvam_llm_model=_env("SARVAM_LLM_MODEL", default="sarvam-105b"),
         sarvam_tts_model=_env("SARVAM_TTS_MODEL", default="bulbul:v3"),
         sarvam_tts_speaker=_env("SARVAM_TTS_SPEAKER", default="ritu"),
+        sarvam_tts_sample_rate=_int_env("SARVAM_TTS_SAMPLE_RATE", 16000),
         sarvam_vision_model=_env("SARVAM_VISION_MODEL", default="gemma4"),
         openrouter_api_key=_env("OPENROUTER_API_KEY"),
         openrouter_base_url=_env("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1").rstrip("/"),
@@ -129,6 +149,8 @@ def load_settings() -> Settings:
         merchant_name=_env("MERCHANT_NAME", default="Ramesh General Store"),
         public_base_url=_env("PUBLIC_BASE_URL", default="http://localhost:8000").rstrip("/"),
         demo_mode=_normalise_demo_mode(_env("DEMO_MODE", default="auto")),
+        fast_path=_flag(_env("FAST_PATH", default="on"), True),
+        voice_pronunciation_fixes=_flag(_env("VOICE_PRONUNCIATION_FIXES", default="on"), True),
         database_url=_env("DATABASE_URL", default=f"sqlite:///{BACKEND_DIR / 'db.sqlite'}"),
     )
 

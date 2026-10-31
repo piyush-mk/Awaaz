@@ -10,6 +10,7 @@ GST is worked out of the MRP (prices are MRP-inclusive). Composition-scheme stor
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 from typing import Optional
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models import Invoice, InvoiceItem, Message, StoreProfile
-from services import invoicing, khata, tts_cache, whatsapp
+from services import invoicing, khata, tts_cache, voice_style, whatsapp
 
 log = logging.getLogger("awaaz.receipts")
 
@@ -88,13 +89,18 @@ def _paid_parts(invoice: Invoice) -> list[tuple[str, float]]:
 
 
 def voice_script(db: Session, invoice: Invoice) -> str:
-    items = ", ".join(spoken_item(it) for it in invoice.items)
-    text = f"Aapne {items} liya, kul ₹{fmt_money(invoice.total)}."
+    """The spoken receipt. The variant is picked from the invoice number, so the same bill always
+    gets the same words (cache friendly) while different bills sound different."""
+    names = [spoken_item(it) for it in invoice.items]
+    items = ", ".join(names)
+    khata_text = ""
     khata_amt = sum(a for m, a in _paid_parts(invoice) if m == "khata")
     if khata_amt > 0 and invoice.customer_id:
-        text += (f" Isme ₹{fmt_money(khata_amt)} aapke khate mein likhe hain, "
-                 f"kul baaki ₹{fmt_money(khata.balance(db, invoice.customer_id))}.")
-    return text + f" Dhanyavaad, {_store(db).name} mein phir aaiyega."
+        khata_text = (f" Isme {voice_style.rs(khata_amt)} khate mein likhe hain, "
+                      f"kul baaki {voice_style.rs(khata.balance(db, invoice.customer_id))}.")
+    kind = "voice_receipt" if len(names) <= 4 and len(items) <= 90 else "voice_receipt_short"
+    return voice_style.line(kind, seed=invoice.number, max_chars=260, items=items, count=len(names),
+                            total=invoice.total, khata=khata_text, store=_store(db).name).text
 
 
 # --- WhatsApp text ---
@@ -248,10 +254,44 @@ async def send_receipts(db: Session, invoice: Invoice, to: Optional[str] = None,
         if voice:
             script = voice_script(db, invoice)
             lang = (customer.language if customer and customer.language else "hi-IN")
-            speech = await tts_cache.get_speech(script, language=lang)
-            out.append(whatsapp.notify(db, phone, script, type="audio",
-                                       customer_id=invoice.customer_id,
-                                       media_ref=absolute_url(speech.url)))
+            key = tts_cache.key_of_line(script, lang, None, RECEIPT_PACE)
+            cached = tts_cache.get_cached(key)
+            if cached or not tts_cache.available():
+                # instant: the clip exists, or there is no TTS and the audio message carries the text
+                out.append(whatsapp.notify(db, phone, script, type="audio",
+                                           customer_id=invoice.customer_id,
+                                           media_ref=absolute_url(cached)))
+            else:
+                # never make the payment wait for TTS: the voice note follows when the clip is ready
+                _send_voice_later(phone, script, lang, invoice.customer_id)
     except Exception:  # messaging must never break a sale
         log.exception("receipt send failed for invoice %s", invoice.number)
     return out
+
+
+RECEIPT_PACE = 0.97
+_pending_voice: set = set()
+
+
+def _send_voice_later(phone: str, script: str, lang: str, customer_id: Optional[int]) -> None:
+    async def job() -> None:
+        from database import SessionLocal  # local: keeps module import light
+
+        try:
+            sp = await tts_cache.ensure(script, lang, None, RECEIPT_PACE)
+            db = SessionLocal()
+            try:
+                whatsapp.notify(db, phone, script, type="audio", customer_id=customer_id,
+                                media_ref=absolute_url(sp.url))
+                db.commit()
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001
+            log.exception("deferred voice receipt failed")
+
+    try:
+        task = asyncio.get_running_loop().create_task(job())
+    except RuntimeError:
+        return
+    _pending_voice.add(task)
+    task.add_done_callback(_pending_voice.discard)

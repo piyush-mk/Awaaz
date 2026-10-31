@@ -67,7 +67,7 @@ def test_amount_based_cheeni_weigh_instruction(client):
     assert line["name"] == "Cheeni" and line["qty"] == 0.45
     assert line["weigh_instruction"] == "450 gram tolo"
     assert line["amount_rupees"] == 20.0 and line["line_total"] == 20.0
-    assert "450 gram tolo" in r["spoken_text"]
+    assert "450 gram" in r["spoken_text"] and "Tol" in r["spoken_text"]  # the weigh-out instruction is spoken
     assert r["cart"]["total"] == 20.0
     co = client.post("/api/cart/s-cheeni/checkout", json={"rail": "simulated"}).json()
     assert co["total"] == 20.0
@@ -99,7 +99,7 @@ def test_checkout_simulate_receipts_and_idempotence(client):
     sim = client.post(f"/api/payments/{order}/simulate").json()
     assert sim["ok"] and sim["already_paid"] is False
     assert sim["invoice_paid"] is True
-    assert "₹249" in sim["spoken_text"] and "prapt hue" in sim["spoken_text"]
+    assert "₹249" in sim["spoken_text"] and sim["speech"]["text"] == sim["spoken_text"]
     assert any(item["name"] == "Colgate" and item["quantity"] == 8 for item in sim["low_stock"])
     assert stock(5) == 8
     inv = client.get(f"/api/invoices/{co['invoice_id']}").json()
@@ -107,7 +107,7 @@ def test_checkout_simulate_receipts_and_idempotence(client):
 
     pr = store_events(mark, "payment_received")
     assert len(pr) == 1 and pr[0]["data"]["amount"] == 249.0
-    assert pr[0]["data"]["spoken_text"].startswith("₹249 prapt hue")
+    assert "₹249" in pr[0]["data"]["spoken_text"] and pr[0]["data"]["speech"]["text"]
 
     db = SessionLocal()
     new = db.query(Message).order_by(Message.id.desc()).limit(db.query(Message).count() - msgs_before).all()
@@ -117,7 +117,8 @@ def test_checkout_simulate_receipts_and_idempotence(client):
     text = next(m for m in new if m.type == "text")
     assert inv["number"] in text.body and f"/r/{inv['public_token']}" in text.body
     audio = next(m for m in new if m.type == "audio")
-    assert audio.body.startswith("Aapne 2 Maggi, 1 Surf Excel, 4 Colgate liya, kul ₹249")
+    assert "2 Maggi, 1 Surf Excel, 4 Colgate" in audio.body and "₹249" in audio.body
+    assert "Ramesh General Store" in audio.body  # the shop name closes the voice receipt
 
     # second simulate is a no-op
     mark = last_event_id()
@@ -292,7 +293,7 @@ def test_fix_and_remove_by_voice_and_manual_edits(client):
     r = say(client, "colgate ko ek kar do", "s-fix")
     assert {ln["name"]: ln["qty"] for ln in r["cart"]["lines"]} == {"Maggi": 2, "Colgate": 1}
     r = say(client, "colgate hata do", "s-fix")
-    assert [ln["name"] for ln in r["cart"]["lines"]] == ["Maggi"] and "hata diya" in r["spoken_text"]
+    assert [ln["name"] for ln in r["cart"]["lines"]] == ["Maggi"] and "Colgate" in r["spoken_text"]
     # undo brings the removed line back
     assert len(say(client, "galat hai", "s-fix")["cart"]["lines"]) == 2
     # manual API
@@ -312,8 +313,12 @@ def test_llm_result_replaces_rules_result(client, monkeypatch):
                  ToolCall("add_udhaar", {"customer": "Sharma ji", "amount": 100})]
         return Result(ChatOut(tool_calls=calls), "sarvam", 800)
 
+    import dataclasses
+
     import services.counter as counter_mod
     monkeypatch.setattr(counter_mod.llm, "complete_or_rules", fake)
+    # the fast path would skip the LLM for this fully explained phrase; force the old path
+    monkeypatch.setattr(counter_mod, "settings", dataclasses.replace(counter_mod.settings, fast_path=False))
     r = say(client, PHRASE, "s-llm")
     assert r["source"] == "sarvam"
     # the rules result (3 lines) was replaced, not added to

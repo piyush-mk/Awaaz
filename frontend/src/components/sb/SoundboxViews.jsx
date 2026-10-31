@@ -2,6 +2,7 @@ import QRCode from 'react-qr-code'
 import { AlertTriangle, CheckCircle2, Mic, Scale, ExternalLink, X, Info, Package, Check } from 'lucide-react'
 import { inr, localUrl } from '../../api/sideClient'
 import { CYAN, INK, ORANGE } from './FullPage'
+import SourceChip from '../app/SourceChip'
 
 // Text colours that keep >= 4.5:1 on white (cyan/orange are fills only).
 export const CYAN_TEXT = '#00678C'
@@ -51,6 +52,11 @@ export function HeardBubble({ heard }) {
         </div>
       )}
       {heard.reply && <div className="mt-1.5 pl-7 text-base" style={{ color: '#33415C' }}>{heard.reply}</div>}
+      {(heard.source || heard.timings) && (
+        <div className="mt-1.5 pl-7">
+          <SourceChip source={heard.source} latency={heard.latency} timings={heard.timings} demo={heard.demo} />
+        </div>
+      )}
     </div>
   )
 }

@@ -32,7 +32,10 @@ from sqlalchemy.orm import Session
 from config import settings
 from models import Cart as CartRow, Customer, Invoice, Payment, Product
 from schemas import CartLine
-from services import events, invoicing, khata, receipts, stock_ops, tts_cache
+from services import events, invoicing, khata, receipts, stock_ops
+from services import phrases
+from services import speech as speech_svc
+from services import voice_style
 from services.clock import now_local
 
 log = logging.getLogger("awaaz.payments")
@@ -206,13 +209,16 @@ async def checkout_result(db: Session, invoice: Invoice, *, speak: bool = True,
     if upi is not None and upi.status == "pending":
         qr = create_qr(upi.order_id, upi.amount, f"{settings.merchant_name} bill {invoice.number}",
                        upi.rail if upi.rail in IMPLEMENTED_RAILS else None)
-    if due > 0:
-        spoken = f"Kul ₹{receipts.fmt_money(invoice.total)}. QR scan karke ₹{receipts.fmt_money(due)} bharein."
+    sid = invoice.cart_id
+    if due > 0 and abs(due - invoice.total) > 0.005:
+        said = voice_style.line("checkout_partial", session=sid, total=invoice.total, due=due)
+    elif due > 0:
+        said = voice_style.line("checkout_ready", session=sid, total=invoice.total)
     else:
-        spoken = f"Bill ban gaya, kul ₹{receipts.fmt_money(invoice.total)}."
-    audio_url = None
-    if speak:
-        audio_url = (await tts_cache.get_speech(spoken)).url
+        said = voice_style.line("bill_done", session=sid, total=invoice.total)
+    spoken = said.text
+    speech = speech_svc.request(spoken, kind=said.kind, pace=said.pace, session_id=sid, speak=speak,
+                                ack=phrases.ack_for("checkout" if due > 0 else "done", session=sid))
     primary = invoice.payments[0].order_id if invoice.payments else None
     return {
         "order_id": upi.order_id if upi is not None else primary,
@@ -228,7 +234,8 @@ async def checkout_result(db: Session, invoice: Invoice, *, speak: bool = True,
         "payments": [_payment_dict(p) for p in invoice.payments],
         "customer": _customer_brief(db, invoice.customer_id),
         "receipt_url": receipts.receipt_url(invoice),
-        "spoken_text": spoken, "audio_url": audio_url, "idempotent": idempotent,
+        "spoken_text": spoken, "audio_url": speech["audio_url"], "speech": speech,
+        "idempotent": idempotent,
     }
 
 
@@ -306,10 +313,11 @@ async def checkout_cart(db: Session, cart: CartRow, *, splits: Optional[dict] = 
         events.publish("store", "checkout", jsonable_encoder({**result, "session_id": cart.id}))
         return result
 
-    done = await finalize_invoice(db, invoice, received=None, via="counter")
+    done = await finalize_invoice(db, invoice, received=None, via="counter", speak=speak)
     result = await checkout_result(db, invoice, speak=False)
     result.update({"khata_warning": warning, "spoken_text": done["spoken_text"],
-                   "audio_url": done["audio_url"], "low_stock": done["low_stock"]})
+                   "audio_url": done["audio_url"], "speech": done["speech"],
+                   "low_stock": done["low_stock"]})
     return result
 
 
@@ -330,15 +338,15 @@ def _low_stock(db: Session, stock: list[dict]) -> list[dict]:
             continue
         unit = info.get("unit") or ""
         shown = f"{qty:g} {unit}".strip() if unit in ("kg", "litre") else f"{qty:g}"
-        text = (f"{product.name} khatam ho gaya" if qty <= 0
-                else f"{product.name} ab sirf {shown} bacha hai")
+        text = (voice_style.line("out_of_stock", name=product.name).text if qty <= 0
+                else voice_style.line("low_stock", name=product.name, qty=shown).text)
         out.append({"product_id": product.id, "name": product.name, "quantity": qty, "unit": unit,
                     "threshold": product.threshold, "level": level, "text": text})
     return out
 
 
 async def finalize_invoice(db: Session, invoice: Invoice, *, received: Optional[Payment],
-                           via: str) -> dict:
+                           via: str, speak: bool = True) -> dict:
     """Invoice fully paid: mark it, deduct stock FIFO, publish `payment_received`, send receipts."""
     now = now_local()
     invoice.status = "paid"
@@ -350,16 +358,24 @@ async def finalize_invoice(db: Session, invoice: Invoice, *, received: Optional[
     amount = received.amount if received is not None else invoice.total
     mode = received.mode if received is not None else (
         invoice.payments[0].mode if len(invoice.payments) == 1 else "mixed")
-    spoken = f"₹{receipts.fmt_money(amount)} prapt hue."
+    said = voice_style.line("payment_received", session=invoice.cart_id, amount=amount)
+    spoken = said.text
     if low:
-        spoken += " " + ". ".join(item["text"] for item in low[:3]) + "."
-    audio_url = (await tts_cache.get_speech(spoken)).url
+        spoken += " " + low[0]["text"]
+        if len(low) > 1:
+            more = voice_style.line("low_stock_more", session=invoice.cart_id, more=len(low) - 1) \
+                if len(low) > 2 else voice_style.line("low_stock_one_more", session=invoice.cart_id)
+            spoken += " " + more.text
+    pace = min(said.pace, 0.95) if low else said.pace
+    speech = speech_svc.request(spoken, kind="payment_received", pace=pace, session_id=invoice.cart_id,
+                                speak=speak, ack=phrases.ack_for("paid", session=invoice.cart_id))
+    audio_url = speech["audio_url"]
     data = {
         "order_id": received.order_id if received is not None else
         (invoice.payments[0].order_id if invoice.payments else None),
         "invoice_id": invoice.id, "number": invoice.number, "amount": amount, "total": invoice.total,
         "mode": mode, "via": via, "customer": _customer_brief(db, invoice.customer_id),
-        "spoken_text": spoken, "audio_url": audio_url, "low_stock": low,
+        "spoken_text": spoken, "audio_url": audio_url, "speech": speech, "low_stock": low,
         "stock_after": [{"product_id": s["product_id"], "name": s["name"], "quantity": s["new_quantity"],
                          "unit": s["unit"]} for s in stock],
         "receipt_url": receipts.receipt_url(invoice), "paid_at": now.isoformat(),
@@ -391,12 +407,19 @@ async def settle(db: Session, order_id: str, *, via: str = "simulate",
         done = await finalize_invoice(db, invoice, received=payment, via=via)
     else:
         db.commit()
-        done = {"spoken_text": f"₹{receipts.fmt_money(payment.amount)} prapt hue.", "audio_url": None,
-                "low_stock": [], "receipts": []}
+        rest = round(sum(p.amount for p in invoice.payments if p.status == "pending"), 2) if invoice else 0
+        said = voice_style.line("payment_partial" if rest > 0 else "payment_received",
+                                session=invoice.cart_id if invoice else None,
+                                amount=payment.amount, rest=rest)
+        done = {"spoken_text": said.text, "low_stock": [], "receipts": [],
+                "speech": speech_svc.request(said.text, kind=said.kind, pace=said.pace,
+                                             session_id=invoice.cart_id if invoice else None,
+                                             ack=phrases.ack_for("paid"))}
+        done["audio_url"] = done["speech"]["audio_url"]
     db.refresh(payment)
     return {**payment_view(payment), "ok": True, "already_paid": False,
             "spoken_text": done["spoken_text"], "audio_url": done["audio_url"],
-            "low_stock": done["low_stock"], "receipts": done["receipts"]}
+            "speech": done["speech"], "low_stock": done["low_stock"], "receipts": done["receipts"]}
 
 
 async def fail(db: Session, order_id: str, reason: str = "failed") -> dict:

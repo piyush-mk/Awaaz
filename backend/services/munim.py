@@ -341,13 +341,15 @@ def route(db: Session, question: str) -> list[tuple[str, dict]]:
 # answer
 # ---------------------------------------------------------------------------
 
-NOT_UNDERSTOOD = ("Yeh sawaal abhi samajh nahi aaya. Aap sale, stock, udhaar, expiry ya galla ke baare "
-                  "mein pooch sakte hain.")
+NOT_UNDERSTOOD = ("Ye sawaal samajh nahi aaya ji. Sale, stock, udhaar, expiry ya galla ke baare "
+                  "mein poochiye.")
 
 REPHRASE_SYSTEM = (
-    "Tum Ramesh General Store ke munim ho. User ke sawaal ka jawab sirf neeche diye 'results' se do, "
-    "1 se 3 chhote Hinglish (roman) vaakya mein, bolne layak. Koi number invent ya round mat karo; sirf "
-    "results ke numbers digits mein likho. Rupaye ₹ ke saath. Bullet ya table mat banao."
+    "Tum Ramesh General Store ke munim ho, ek garmjoshi wale quick dukaandaar ki tarah. User ke sawaal ka "
+    "jawab sirf neeche diye 'results' se do, 1 se 3 chhote Hinglish (roman) vaakya mein, bolne layak. "
+    "Ek vaakya mein ek hi baat. Zaroorat ho toh 'ji', 'dekhiye', 'achha' jaisa ek filler, zyada nahi. "
+    "Koi number invent ya round mat karo; sirf results ke numbers digits mein likho. Rupaye ₹ ke saath. "
+    "Mazaak sirf kabhi kabhi, aur paison ya galti par kabhi nahi. Bullet, table, emoji ya dash mat banao."
 )
 
 

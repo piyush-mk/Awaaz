@@ -54,9 +54,11 @@ export default function Soundbox() {
   const sessionId = sessionFromUrl() || 'default'
 
   const speech = useSpeech()
-  const sb = useSoundbox({ speak: speech.speak, cancelSpeech: speech.cancel })
+  const sb = useSoundbox({ speak: speech.speak, cancelSpeech: speech.cancel, speechReady: speech.speechReady, hasPending: speech.hasPending })
   const [store, setStore] = useState('Ramesh General Store')
   const [busy, setBusy] = useState(false)
+  const [understanding, setUnderstanding] = useState(false) // request in flight: "Samajh raha hoon..."
+  const ackRef = useRef(null) // the instant "ji" token of the utterance that just stopped
   const [typed, setTyped] = useState('')
   const [sendingProposal, setSendingProposal] = useState(false)
   const unlockBtn = useRef(null)
@@ -74,21 +76,53 @@ export default function Soundbox() {
   const fail = useCallback((e) => sb.banner(e.message || 'Request fail ho gaya', 'error'), [sb])
 
   const submit = useCallback(
-    async (args) => {
+    async ({ ack, ...args }) => {
       setBusy(true)
-      speech.cancel()
+      setUnderstanding(true)
+      if (!ack) speech.newTurn() // typed input: no ack, but the old reply stops (voice already did via the ack)
       try {
-        await sendUtterance({ sessionId, ...args })
+        const res = await sendUtterance({ sessionId, ...args })
+        ack?.settle() // a reply faster than ~250 ms is not talked over by the ack
+        sb.applyResponse(res) // bill + heard bubble + speech straight from the HTTP reply; SSE reconciles
       } catch (e) {
+        ack?.cancel()
         fail(e)
       } finally {
         setBusy(false)
+        setUnderstanding(false)
       }
     },
-    [sessionId, speech, fail],
+    [sessionId, speech, fail, sb],
   )
 
-  const mic = useMic({ onRecorded: (blob, filename) => submit({ audio: blob, filename }) })
+  const mic = useMic({
+    // the moment recording stops: instant "ji", before any network
+    onStop: () => {
+      ackRef.current = speech.ack()
+      setUnderstanding(true)
+    },
+    onRecorded: (blob, filename) => {
+      const token = ackRef.current && Date.now() - ackRef.current.startedAt < 8000 ? ackRef.current : null
+      ackRef.current = null
+      submit({ audio: blob, filename, ack: token })
+    },
+  })
+
+  // the bill changed (SSE or HTTP): "Samajh raha hoon..." is done
+  useEffect(() => {
+    setUnderstanding(false)
+  }, [sb.cart])
+  // recording stopped but no request ever followed (too short)
+  useEffect(() => {
+    if (!understanding) return undefined
+    const t = setTimeout(() => setUnderstanding(false), 20000)
+    return () => clearTimeout(t)
+  }, [understanding])
+  // pressing the mic while a reply plays cuts it with a short fade; money announcements finish
+  useEffect(() => {
+    if (mic.recording) speech.newTurn()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mic.recording])
 
   const orderId = sb.checkout?.order_id && !sb.checkout.complete ? sb.checkout.order_id : null
 
@@ -133,7 +167,7 @@ export default function Soundbox() {
 
   const recording = mic.recording
   const { mode } = sb
-  const status = recording ? 'RECORDING' : busy ? 'PROCESSING' : speech.speaking ? 'SPEAKING' : sb.connected ? 'LISTENING' : 'OFFLINE'
+  const status = recording ? 'RECORDING' : busy || understanding ? 'PROCESSING' : speech.speaking ? 'SPEAKING' : sb.connected ? 'LISTENING' : 'OFFLINE'
 
   return (
     <FullPage background={SOFT}>
@@ -229,7 +263,7 @@ export default function Soundbox() {
                       connected={sb.connected}
                       tally={sb.tally}
                       listening={recording}
-                      processing={busy}
+                      processing={busy || understanding}
                       heard={sb.heard}
                     />
                   )}
@@ -275,6 +309,14 @@ export default function Soundbox() {
                   {recording ? 'छोड़ें या टैप करें' : 'दबाकर बोलिए'}
                 </div>
                 <div className="text-sm text-white/80">{recording ? 'Release / tap to send' : 'Hold to talk, or tap'}</div>
+                <div
+                  className="h-6 text-base font-semibold text-white/90"
+                  role="status"
+                  aria-live="polite"
+                  data-stage={recording ? 'listening' : understanding ? 'understanding' : 'idle'}
+                >
+                  {recording ? 'Sun raha hoon...' : understanding ? 'Samajh raha hoon...' : ''}
+                </div>
                 {mic.error && <div className="max-w-[200px] text-sm font-semibold" style={{ color: '#FFB4A8' }} role="alert">{mic.error}</div>}
                 {!kiosk && (
                   <button

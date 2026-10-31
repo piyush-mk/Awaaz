@@ -126,7 +126,7 @@ def prepare_tts_text(text: str) -> str:
 
 
 async def tts(text: str, language: str = "hi-IN", speaker: Optional[str] = None, pace: float = 1.0,
-              codec: str = "mp3") -> Result[str]:
+              codec: str = "mp3", sample_rate: Optional[int] = None) -> Result[str]:
     """Synthesize speech. Returns data = base64 audio (`audios[0]` of the response)."""
     global _tts_lang_field_idx
     _require_key()
@@ -134,6 +134,7 @@ async def tts(text: str, language: str = "hi-IN", speaker: Optional[str] = None,
         "text": prepare_tts_text(text), "model": settings.sarvam_tts_model,
         "speaker": speaker or settings.sarvam_tts_speaker, "pace": pace,
         "output_audio_codec": codec,
+        "speech_sample_rate": sample_rate or settings.sarvam_tts_sample_rate,
     }
     with Timer() as t:
         async with http.client(timeout=15.0) as c:

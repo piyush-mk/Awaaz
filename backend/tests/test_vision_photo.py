@@ -87,14 +87,14 @@ def test_shelf_audit_three_frames_variance_and_confirm(client, monkeypatch):
     ])
 
     async def fake(data, mime, task):
-        return Result(next(per_frame), "xai", 5)
+        return Result(next(per_frame), "openrouter", 5)
 
     monkeypatch.setattr(photo.vision, "extract_json_from_image", fake)
     files = [("images", (f"f{i}.jpg", b"frame", "image/jpeg")) for i in range(3)]
     r = client.post("/api/photo/shelf-audit", files=files)
     assert r.status_code == 200, r.text
     out = r.json()
-    assert out["frames"] == 3 and out["frames_read"] == 3 and out["source"] == "xai"
+    assert out["frames"] == 3 and out["frames_read"] == 3 and out["source"] == "openrouter"
     assert out["demo_mode"] is False and "latency_ms" in out and out["status"] == "proposed"
     rows = {x["name"]: x for x in out["rows"]}
     assert rows["Maggi"]["counted"] == 9 and rows["Maggi"]["expected"] == 12      # max(4, 9, 7)

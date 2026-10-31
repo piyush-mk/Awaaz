@@ -36,8 +36,7 @@ export function shortTime(iso) {
 
 const SOURCE_LABELS = {
   sarvam: 'Sarvam',
-  paytm: 'Paytm AI',
-  xai: 'xAI',
+  openrouter: 'OpenRouter',
   rules: 'Rules',
   fixture: 'demo data',
 }

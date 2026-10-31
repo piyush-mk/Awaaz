@@ -1,8 +1,9 @@
-"""LLM provider chain: Sarvam (sarvam-105b) -> Paytm inference -> raise LLMUnavailable.
+"""LLM provider chain: Sarvam (sarvam-105b) -> OpenRouter -> raise LLMUnavailable.
 
 Callers catch `LLMUnavailable` and fall back to the rules parser
 (`services/quantity.py` / `fixtures.rules_tool_calls`); `complete_or_rules` does
-that for you. One retry with backoff on HTTP 503 and on timeouts.
+that for you. Sarvam gets one retry with backoff on HTTP 503/429 and on timeouts;
+OpenRouter retries itself once on 429/503 (credit is limited, so never more).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from config import settings
-from services import fixtures, http, sarvam
+from services import fixtures, openrouter, sarvam
 from services.types import ChatOut, LLMUnavailable, ProviderError, Result, Timer
 
 RETRY_BACKOFF_SECONDS = 0.4
@@ -38,28 +39,6 @@ async def _guarded(call, retries: int = 1) -> Result[ChatOut]:
         await asyncio.sleep(RETRY_BACKOFF_SECONDS * attempt)
 
 
-async def _paytm_chat(messages: list[dict[str, Any]], tools: Optional[list[dict]], tool_choice: Any,
-                      response_format: Optional[dict], timeout: float) -> Result[ChatOut]:
-    """OpenAI-compatible call to the Paytm inference gateway (the old voice.py call)."""
-    payload: dict[str, Any] = {
-        "model": settings.paytm_llm_model, "messages": messages, "temperature": 0,
-        "max_completion_tokens": 400,
-    }
-    if tools:
-        payload["tools"] = tools
-        payload["tool_choice"] = tool_choice
-    if response_format:
-        payload["response_format"] = response_format
-    with Timer() as t:
-        async with http.client(timeout=timeout) as c:
-            resp = await c.post(f"{settings.paytm_base_url}/v1/chat/completions",
-                                headers={"Authorization": f"Bearer {settings.paytm_api_key}",
-                                         "Content-Type": "application/json"}, json=payload)
-    if resp.status_code != 200:
-        raise ProviderError(http.error_text(resp), "paytm", resp.status_code)
-    return Result(sarvam.parse_chat_response(resp.json()), "paytm", t.ms)
-
-
 async def complete(messages: list[dict[str, Any]], tools: Optional[list[dict]] = None,
                    tool_choice: Any = "auto", response_format: Optional[dict] = None,
                    timeout: float = 4.0) -> Result[ChatOut]:
@@ -73,12 +52,12 @@ async def complete(messages: list[dict[str, Any]], tools: Optional[list[dict]] =
                                                       response_format, timeout))
         except ProviderError as exc:
             errors.append(f"sarvam: {exc}")
-    if settings.has_paytm:
+    if settings.has_openrouter:
         try:
-            return await _guarded(lambda: _paytm_chat(messages, tools, tool_choice,
-                                                      response_format, timeout))
+            return await _guarded(lambda: openrouter.chat(messages, tools, tool_choice,
+                                                          response_format, timeout), retries=0)
         except ProviderError as exc:
-            errors.append(f"paytm: {exc}")
+            errors.append(f"openrouter: {exc}")
     raise LLMUnavailable("; ".join(errors) or "no LLM provider configured", "llm")
 
 

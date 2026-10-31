@@ -8,8 +8,7 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="awaaz-test-")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP}/test.sqlite"
-for _k in ("SARVAM_API_KEY", "PAYTM_API_KEY", "PAYTM_AI_KEY", "XAI_KEY", "WA_TOKEN",
-           "WA_PHONE_NUMBER_ID", "WA_APP_SECRET"):
+for _k in ("SARVAM_API_KEY", "OPENROUTER_API_KEY", "WA_TOKEN", "WA_PHONE_NUMBER_ID", "WA_APP_SECRET"):
     os.environ[_k] = ""
 os.environ["DEMO_MODE"] = "on"
 os.environ["PUBLIC_BASE_URL"] = "http://localhost:8000"

@@ -98,8 +98,7 @@ Put keys in `backend/.env` (never commit it). All are optional; `DEMO_MODE=auto`
 | Variable | Purpose |
 |---|---|
 | `SARVAM_API_KEY` | Speech to text (Saaras), LLM with tool calling (Sarvam-105B), text to speech (Bulbul), vision |
-| `PAYTM_API_KEY` | Secondary LLM (Paytm inference gateway) |
-| `XAI_KEY` | Vision fallback (Grok) |
+| `OPENROUTER_API_KEY` | Backup AI when Sarvam fails: chat with tool calling (`OPENROUTER_MODEL`, default `anthropic/claude-haiku-5.5`) and vision (`OPENROUTER_VISION_MODEL`, default `google/gemini-3.1-flash-lite`). Credit is limited, so it is only used after Sarvam fails |
 | `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET`, `WA_VERIFY_TOKEN` | WhatsApp Cloud API. Without them the in-app simulator is used |
 | `MERCHANT_UPI_VPA`, `MERCHANT_NAME` | Receiver of the demo QR. **Real money if scanned** |
 | `PUBLIC_BASE_URL` | Public https URL of the backend (receipt links, webhooks, CORS) |
@@ -116,13 +115,13 @@ Check `/status` (or `GET /api/admin/health?live=1`) to see which providers are l
       v               v                    v
   FastAPI  routers: agent, cart, payments, invoices, khata, purchases,
            galla, brief, stock, whatsapp, admin, events
-  services: sarvam, llm, vision, quantity, catalog, pricing, invoicing,
+  services: sarvam, openrouter, llm, vision, quantity, catalog, pricing, invoicing,
             stock_ops, receipts, whatsapp, khata, insights, reorder, ...
   SQLite (SQLAlchemy)
 ```
 
 - One pattern everywhere: capture (voice, photo, WhatsApp), understand (Sarvam), propose (a pending action), the merchant confirms, then commit and notify.
-- Every AI call goes through a provider chain with fallback: Sarvam, then a secondary provider, then deterministic rules, then a demo fixture.
+- Every AI call goes through a provider chain with fallback: Sarvam first (it is the primary provider for speech, chat, tool calling and vision), then OpenRouter as the backup, then deterministic rules (chat) or a demo fixture. Vision runs Sarvam, then OpenRouter, then a fixture.
 - The rules parser answers in milliseconds and the cart updates immediately; the LLM result reconciles shortly after.
 - Run the API as a **single worker**: live events use an in-process bus.
 

@@ -42,8 +42,7 @@ Edit `/opt/awaaz/backend/.env`, then `systemctl restart awaaz`.
 | Key | Effect if missing |
 |---|---|
 | `SARVAM_API_KEY` | Speech, LLM, spoken replies and vision fall back to fixtures and browser voice |
-| `PAYTM_API_KEY` | Secondary LLM only |
-| `XAI_KEY` | Vision fallback only |
+| `OPENROUTER_API_KEY` | Backup AI only (chat and vision after Sarvam fails). Optional `OPENROUTER_MODEL` and `OPENROUTER_VISION_MODEL`. The account has little credit (about $6): `/status` shows what is left after a Live check |
 | `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` | In-app WhatsApp simulator only (nothing breaks) |
 | `MERCHANT_UPI_VPA` | QR pays the placeholder id, not yours. **Real money if scanned** |
 

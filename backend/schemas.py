@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # v2 shared contracts
 # ---------------------------------------------------------------------------
 
-AISource = Literal["sarvam", "paytm", "xai", "rules", "fixture"]
+AISource = Literal["sarvam", "openrouter", "rules", "fixture"]
 
 
 class AIResult(BaseModel):

@@ -161,12 +161,12 @@ async def tts(text: str, language: str = "hi-IN", speaker: Optional[str] = None,
 # ---------------------------------------------------------------------------
 
 
-def parse_chat_response(body: dict[str, Any]) -> ChatOut:
+def parse_chat_response(body: dict[str, Any], provider: str = "sarvam") -> ChatOut:
     """OpenAI-style completion -> ChatOut. `function.arguments` is a JSON string."""
     try:
         message = body["choices"][0]["message"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise ProviderError("chat response had no choices", "sarvam") from exc
+        raise ProviderError("chat response had no choices", provider) from exc
     calls: list[ToolCall] = []
     for tc in message.get("tool_calls") or []:
         fn = tc.get("function") or {}
@@ -174,7 +174,7 @@ def parse_chat_response(body: dict[str, Any]) -> ChatOut:
         try:
             args = json.loads(raw) if isinstance(raw, str) else dict(raw)
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            raise ProviderError(f"tool arguments are not valid JSON: {str(raw)[:80]}", "sarvam") from exc
+            raise ProviderError(f"tool arguments are not valid JSON: {str(raw)[:80]}", provider) from exc
         calls.append(ToolCall(name=fn.get("name", ""), arguments=args, id=tc.get("id", "")))
     return ChatOut(content=(message.get("content") or "").strip(), tool_calls=calls)
 

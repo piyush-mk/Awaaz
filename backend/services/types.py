@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, Optional, TypeVar
 
-Source = Literal["sarvam", "paytm", "xai", "rules", "fixture"]
+Source = Literal["sarvam", "openrouter", "rules", "fixture"]
 
 T = TypeVar("T")
 

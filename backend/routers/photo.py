@@ -8,7 +8,7 @@
   POST /api/photo/shelf-audit/{id}/confirm   write audit StockMove adjustments (optional count edits)
   POST /api/photo/shelf-audit/{id}/cancel
 
-Chain is Sarvam gemma4 -> xAI grok-4.3 -> fixture (see services/vision.py).
+Chain is Sarvam gemma4 -> OpenRouter -> fixture (see services/vision.py).
 """
 from __future__ import annotations
 

@@ -47,15 +47,11 @@ class Settings:
     sarvam_tts_speaker: str = "ritu"
     sarvam_vision_model: str = "gemma4"
 
-    # Paytm inference (secondary LLM, OpenAI-compatible)
-    paytm_api_key: str = ""
-    paytm_base_url: str = "https://api.inference.paytm.com"
-    paytm_llm_model: str = "llama-3.3-70b-versatile"
-
-    # xAI (vision fallback)
-    xai_key: str = ""
-    xai_base_url: str = "https://api.x.ai"
-    xai_vision_model: str = "grok-4.3"
+    # OpenRouter (backup for chat/tool calling and vision, OpenAI-compatible; limited credit)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "anthropic/claude-haiku-5.5"
+    openrouter_vision_model: str = "google/gemini-3.1-flash-lite"
 
     # WhatsApp Cloud API
     wa_token: str = ""
@@ -78,12 +74,8 @@ class Settings:
         return bool(self.sarvam_api_key)
 
     @property
-    def has_paytm(self) -> bool:
-        return bool(self.paytm_api_key)
-
-    @property
-    def has_xai(self) -> bool:
-        return bool(self.xai_key)
+    def has_openrouter(self) -> bool:
+        return bool(self.openrouter_api_key)
 
     @property
     def has_whatsapp(self) -> bool:
@@ -125,11 +117,10 @@ def load_settings() -> Settings:
         sarvam_tts_model=_env("SARVAM_TTS_MODEL", default="bulbul:v3"),
         sarvam_tts_speaker=_env("SARVAM_TTS_SPEAKER", default="ritu"),
         sarvam_vision_model=_env("SARVAM_VISION_MODEL", default="gemma4"),
-        paytm_api_key=_env("PAYTM_API_KEY", "PAYTM_AI_KEY"),
-        paytm_base_url=_env("PAYTM_API_BASE_URL", "PAYTM_AI_URL",
-                            default="https://api.inference.paytm.com").rstrip("/"),
-        paytm_llm_model=_env("PAYTM_LLM_MODEL", default="llama-3.3-70b-versatile"),
-        xai_key=_env("XAI_KEY"),
+        openrouter_api_key=_env("OPENROUTER_API_KEY"),
+        openrouter_base_url=_env("OPENROUTER_BASE_URL", default="https://openrouter.ai/api/v1").rstrip("/"),
+        openrouter_model=_env("OPENROUTER_MODEL", default="anthropic/claude-haiku-5.5"),
+        openrouter_vision_model=_env("OPENROUTER_VISION_MODEL", default="google/gemini-3.1-flash-lite"),
         wa_token=_env("WA_TOKEN"),
         wa_phone_number_id=_env("WA_PHONE_NUMBER_ID"),
         wa_verify_token=_env("WA_VERIFY_TOKEN", default="awaaz-verify"),

@@ -28,7 +28,7 @@ python scripts/smoke.py --base http://localhost:8000   # whole demo story over H
 
 ## Conventions
 - Capture, understand, propose, confirm, commit, notify: money and stock only change after the merchant confirms (`PendingAction`).
-- Every AI call returns `{data, source, latency_ms}` and falls back: Sarvam, secondary provider, rules, fixture. `DEMO_MODE=auto` must keep the demo working with no keys.
+- Every AI call returns `{data, source, latency_ms}` and falls back: Sarvam (primary), OpenRouter (backup, limited credit), rules, fixture. Vision: Sarvam, OpenRouter, fixture. `DEMO_MODE=auto` must keep the demo working with no keys.
 - Prices are MRP inclusive; GST is worked out of the MRP (`services/pricing.py`). Rates are data, not code.
 - Run the API as a single worker (in-process event bus).
 - Never commit `.env`, databases or keys. The repo is public.

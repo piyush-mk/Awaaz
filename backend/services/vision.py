@@ -1,7 +1,7 @@
 """Image understanding: photo in, structured JSON out.
 
 `extract_json_from_image(image_bytes, mime, task)` runs the chain
-Sarvam gemma4 -> xAI grok-4.3 -> deterministic fixture and returns a `Result`
+Sarvam gemma4 -> OpenRouter (gemini-3.1-flash-lite) -> deterministic fixture and returns a `Result`
 whose `data` is already normalised to the task's shape:
 
   shelf          [{name, quantity}]
@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from config import settings
-from services import fixtures, sarvam, xai
+from services import fixtures, openrouter, sarvam
 from services.types import ProviderError, Result, Timer
 
 Task = str
@@ -166,21 +166,21 @@ def normalize_result(task: str, data: Any) -> Any:
 
 
 async def extract_json_from_image(image_bytes: bytes, mime: str, task: Task) -> Result[Any]:
-    """Photo -> normalised JSON for `task`. Chain: sarvam -> xai -> fixture."""
+    """Photo -> normalised JSON for `task`. Chain: sarvam -> openrouter -> fixture."""
     if task not in TASKS:
         raise ValueError(f"unknown vision task: {task}")
     prompt, schema = PROMPTS[task], SCHEMAS[task]
     errors: list[str] = []
     if not settings.fixtures_only:
         for name, available, call in (("sarvam", settings.has_sarvam, sarvam.vision),
-                                      ("xai", settings.has_xai, xai.vision)):
+                                      ("openrouter", settings.has_openrouter, openrouter.vision)):
             if not available:
                 continue
             try:
                 with Timer() as t:
                     raw = await call(image_bytes, mime, prompt, schema)
                     data = normalize_result(task, parse_json_loose(raw.data))
-                return Result(data, name, t.ms)  # type: ignore[arg-type]
+                return Result(data, name, t.ms, dict(raw.meta))  # type: ignore[arg-type]
             except Exception as exc:  # noqa: BLE001 - try the next provider
                 errors.append(f"{name}: {str(exc)[:150]}")
     if not settings.fixtures_allowed:

@@ -32,7 +32,12 @@ Capture, understand, propose, confirm, commit, notify.
 
 ## Provider chain and demo mode
 
-Each AI call returns a result envelope `{data, source, latency_ms}` where `source` is `sarvam`, `paytm`, `xai`, `rules` or `fixture`. The chain is Sarvam, then a secondary provider, then deterministic rules, then a fixture. `DEMO_MODE` controls fallback:
+Each AI call returns a result envelope `{data, source, latency_ms}` where `source` is `sarvam`, `openrouter`, `rules` or `fixture`. Sarvam is the primary provider for everything it does (speech to text, text to speech, chat with tool calling, vision). The chains are:
+
+- Chat and tool calling: Sarvam `sarvam-105b`, then OpenRouter (`anthropic/claude-haiku-5.5`), then the rules parser, then a fixture.
+- Vision: Sarvam `gemma4`, then OpenRouter (`google/gemini-3.1-flash-lite`), then a fixture.
+
+OpenRouter is a backup with limited credit: temperature 0, small `max_tokens`, one retry only on HTTP 429 or 503, and the dollar cost of each call is kept in the result metadata. `/status` shows the remaining credit after a live check. `DEMO_MODE` controls fallback:
 
 | Mode | Behaviour |
 |---|---|

@@ -51,6 +51,7 @@ Edit `/opt/awaaz/backend/.env`, then `systemctl restart awaaz`.
 | `SARVAM_STT_MODEL`, `SARVAM_TTS_MODEL`, `SARVAM_TTS_SPEAKER` | Leave unset to use the latest (`saaras:v4`, `bulbul:v4-flash`). An older pinned `saaras:v3` loses product-name hints |
 | `OPENROUTER_API_KEY` | Backup AI only (chat and vision after Sarvam fails). Optional `OPENROUTER_MODEL` and `OPENROUTER_VISION_MODEL`. The account has little credit (about $6): `/status` shows what is left after a Live check |
 | `WA_TOKEN`, `WA_PHONE_NUMBER_ID`, `WA_APP_SECRET` | In-app WhatsApp simulator only (nothing breaks) |
+| `WA_LIVE_RECIPIENTS` | Comma separated numbers that may receive REAL WhatsApp messages. Set it whenever WhatsApp is live: the demo shop's customers have made-up numbers that could belong to real people. Empty means everyone |
 | `MERCHANT_UPI_VPA` | QR pays the placeholder id, not yours. **Real money if scanned** |
 
 Keep `DEMO_MODE=auto`. `off` surfaces raw provider errors; use it only to diagnose a failing live call.

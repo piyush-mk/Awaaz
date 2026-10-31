@@ -263,6 +263,8 @@ async def deliver(message_id: int) -> bool:
             phone = normalize_phone(sup.phone) if sup else None
         if not phone:
             return False
+        if not recipient_allowed(phone):  # not on WA_LIVE_RECIPIENTS: stays in the simulator
+            return False
         ok, wa_id, reason = False, None, None
         try:
             async with http.client(timeout=20.0) as client:
@@ -324,21 +326,46 @@ def _run_in_thread(message_id: int) -> None:
 _schedule: Callable[[int], None] = _run_in_thread
 
 
-def _will_deliver(msg: Message, db: Session) -> bool:
-    """True when `deliver` will have a phone number and keys for this row."""
-    if not settings.has_whatsapp:
-        return False
-    if normalize_phone(msg.to):
+def live_recipients() -> set[str]:
+    """Last 10 digits of every number in WA_LIVE_RECIPIENTS (empty set = no restriction)."""
+    out = set()
+    for raw in (settings.wa_live_recipients or "").split(","):
+        digits = normalize_phone(raw.strip())
+        if digits:
+            out.add(digits[-10:])
+    return out
+
+
+def recipient_allowed(phone: Optional[str]) -> bool:
+    """False when an allowlist is set and this number is not on it (the message stays in the simulator)."""
+    allowed = live_recipients()
+    if not allowed:
         return True
+    digits = normalize_phone(phone)
+    return bool(digits and digits[-10:] in allowed)
+
+
+def _resolve_phone(msg: Message, db: Session) -> Optional[str]:
+    """The number a message would really be sent to: `to`, else the customer's, else the supplier's."""
+    if normalize_phone(msg.to):
+        return msg.to
     if msg.customer_id:
         cust = db.get(Customer, msg.customer_id)
         if cust and normalize_phone(cust.phone):
-            return True
+            return cust.phone
     if msg.supplier_id:
         sup = db.get(Supplier, msg.supplier_id)
         if sup and normalize_phone(sup.phone):
-            return True
-    return False
+            return sup.phone
+    return None
+
+
+def _will_deliver(msg: Message, db: Session) -> bool:
+    """True when `deliver` will have keys, a phone number, and permission (allowlist) for this row."""
+    if not settings.has_whatsapp:
+        return False
+    phone = _resolve_phone(msg, db)
+    return bool(phone) and recipient_allowed(phone)
 
 
 def notify(

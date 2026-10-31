@@ -60,6 +60,9 @@ class Settings:
     # WhatsApp Cloud API
     wa_token: str = ""
     wa_phone_number_id: str = ""
+    # Comma separated phone numbers allowed to receive REAL WhatsApp messages. Empty = everyone. Anything
+    # else stays in the in-app simulator, so demo customers with made-up numbers are never messaged.
+    wa_live_recipients: str = ""
     wa_verify_token: str = "awaaz-verify"
     wa_app_secret: str = ""
 
@@ -147,6 +150,7 @@ def load_settings() -> Settings:
         openrouter_vision_model=_env("OPENROUTER_VISION_MODEL", default="google/gemini-3.1-flash-lite"),
         wa_token=_env("WA_TOKEN"),
         wa_phone_number_id=_env("WA_PHONE_NUMBER_ID"),
+        wa_live_recipients=_env("WA_LIVE_RECIPIENTS"),
         wa_verify_token=_env("WA_VERIFY_TOKEN", default="awaaz-verify"),
         wa_app_secret=_env("WA_APP_SECRET"),
         merchant_upi_vpa=_env("MERCHANT_UPI_VPA", default="paytm.merchant@paytm"),

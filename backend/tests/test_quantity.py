@@ -42,6 +42,7 @@ CASES = [
     ("bees rupaye ka maggi", {"Maggi": 1}),
     # --- scripts and spelling ---
     ("२ मैगी", {"Maggi": 2}),
+    ("डू मैगी एक सर्फ एक्सेल चार कोलगेट", {"Maggi": 2, "Surf Excel": 1, "Colgate": 4}),  # Saaras can hear "do" as डू
     ("दो मैगी एक सर्फ एक्सेल चार कोलगेट", {"Maggi": 2, "Surf Excel": 1, "Colgate": 4}),
     ("तीन पारले जी", {"Parle-G": 3}),
     ("maggie teen", {"Maggi": 3}),

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from services import brief as brief_svc
+from config import settings
 from services import catalog, events, munim, reorder, sarvam
 from services.clock import now_local
 
@@ -160,7 +161,8 @@ async def munim_ask(request: Request, speak: bool = True, llm: bool = True,
 
     transcript, stt_source = (text or "").strip(), "rules"
     if not transcript and audio is not None:
-        phrase = x_demo_phrase or munim.EXAMPLE_QUESTIONS[0]  # fixture STT: a sensible demo question
+        # Fixture STT gets a sensible demo question; a failed real call must not answer a question nobody asked.
+        phrase = x_demo_phrase or (munim.EXAMPLE_QUESTIONS[0] if settings.fixtures_only or not settings.has_sarvam else None)
         stt = await sarvam.stt(audio[0], audio[1], keyterms=catalog.keyterms(db), demo_phrase=phrase)
         transcript, stt_source = stt.data["transcript"], stt.source
     result = await munim.ask(db, transcript, use_llm=llm)

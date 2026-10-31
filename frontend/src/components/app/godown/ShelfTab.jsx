@@ -89,6 +89,14 @@ export default function ShelfTab() {
     )
   }
 
+  if (!rows.length) {
+    return (
+      <Empty icon={Camera} hi="Is photo mein saaman gin nahi paya" en="Shelf ke paas se, saaf roshni mein photo lein">
+        <PhotoButton variant="blue" multiple busy={busy} label="Doosri photo" onFiles={run} />
+      </Empty>
+    )
+  }
+
   return (
     <div className="space-y-3">
       <Card>

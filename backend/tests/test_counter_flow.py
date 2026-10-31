@@ -306,7 +306,17 @@ def test_fix_and_remove_by_voice_and_manual_edits(client):
     assert client.delete("/api/cart/s-fix").json()["lines"] == []
 
 
-def test_llm_result_replaces_rules_result(client, monkeypatch):
+def test_exact_rules_are_not_overwritten_by_llm(client, monkeypatch):
+    async def wrong(messages, db, tools=None, context="counter", timeout=4.0):
+        raise AssertionError("the LLM must not be asked when the rules fully understood")
+
+    import services.counter as counter_mod
+    monkeypatch.setattr(counter_mod.llm, "complete_or_rules", wrong)
+    r = say(client, PHRASE, "s-sure")
+    assert r["source"] != "sarvam" and len(r["cart"]["lines"]) == 3
+
+
+def test_llm_handles_what_the_rules_do_not_understand(client, monkeypatch):
     async def fake(messages, db, tools=None, context="counter", timeout=4.0):
         calls = [ToolCall("add_to_cart", {"items": [{"name": "Maggi", "qty": 3}]}),
                  ToolCall("add_udhaar", {"customer": "Sharma ji", "amount": 100})]
@@ -314,9 +324,8 @@ def test_llm_result_replaces_rules_result(client, monkeypatch):
 
     import services.counter as counter_mod
     monkeypatch.setattr(counter_mod.llm, "complete_or_rules", fake)
-    r = say(client, PHRASE, "s-llm")
+    r = say(client, "woh bachon wala kuch de do", "s-llm")
     assert r["source"] == "sarvam"
-    # the rules result (3 lines) was replaced, not added to
     assert [(ln["name"], ln["qty"]) for ln in r["cart"]["lines"]] == [("Maggi", 3)]
     assert r["actions"][0]["kind"] == "add_udhaar" and r["actions"][0]["source"] == "sarvam"
     # undo restores the pre-utterance cart (empty)

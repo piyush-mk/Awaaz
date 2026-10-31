@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 import re
 from typing import Any, Optional
@@ -26,6 +27,8 @@ from services.types import ChatOut, ProviderError, Result, Timer, ToolCall
 _TTS_LANG_FIELDS = ["language_code", "target_language_code"]
 _tts_lang_field_idx = 0  # index into _TTS_LANG_FIELDS that last worked
 TTS_MAX_CHARS = 2400
+
+log = logging.getLogger(__name__)
 
 
 def _headers(json_body: bool = False) -> dict[str, str]:
@@ -61,17 +64,26 @@ async def stt(audio_bytes: bytes, filename: str = "audio.webm", language: str = 
         return Result(fixtures.stt_fixture(demo_phrase), "fixture", 0)
     try:
         return await _stt_call(audio_bytes, filename, language, keyterms or [])
-    except Exception as exc:  # any failure falls back to a fixture unless DEMO_MODE=off
+    except Exception as exc:
         if not settings.fixtures_allowed:
             raise exc if isinstance(exc, ProviderError) else ProviderError(str(exc), "sarvam")
-        return Result(fixtures.stt_fixture(demo_phrase), "fixture", 0, {"error": str(exc)[:200]})
+        log.warning("speech to text failed: %s", str(exc)[:300])
+        if demo_phrase:
+            return Result(fixtures.stt_fixture(demo_phrase), "fixture", 0, {"error": str(exc)[:200]})
+        # Real speech was not understood. Never swap in a canned order: it would bill what nobody said.
+        return Result({"transcript": "", "language_code": language}, "failed", 0, {"error": str(exc)[:200]})
+
+
+STT_MIME = {"webm": "audio/webm", "ogg": "audio/ogg", "oga": "audio/ogg", "opus": "audio/ogg", "m4a": "audio/mp4",
+            "mp4": "audio/mp4", "aac": "audio/aac", "mp3": "audio/mpeg", "mpeg": "audio/mpeg", "wav": "audio/wav"}
 
 
 async def _stt_call(audio_bytes: bytes, filename: str, language: str, keyterms: list[str]) -> Result[dict]:
-    mime = mimetypes.guess_type(filename)[0] or "audio/webm"
+    # By extension, not mimetypes: that can answer video/webm, or nothing at all on Windows.
+    mime = STT_MIME.get(filename.rsplit(".", 1)[-1].lower(), "audio/webm")
     data = {"model": settings.sarvam_stt_model, "language_code": language}
     terms = [t[:64] for t in keyterms[:50] if t]
-    if terms:
+    if terms and settings.sarvam_stt_model.startswith("saaras:v4"):  # the API rejects keyterms on older models
         data["keyterms"] = json.dumps(terms, ensure_ascii=False)
     with Timer() as t:
         async with http.client(timeout=20.0) as c:

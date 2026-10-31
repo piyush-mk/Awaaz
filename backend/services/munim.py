@@ -404,7 +404,7 @@ async def ask(db: Session, question: str, today: Optional[date] = None, use_llm:
         if source in ("sarvam", "paytm"):
             reworded = await _llm_rephrase(question, results)
             if reworded:
-                answer = reworded
+                answer = re.sub(r"(₹\s?[\d,]+)\.0+\b", r"\1", reworded)  # the model writes ₹850.0
     return {
         "question": question, "answer": answer, "spoken_text": brief.spoken_version(answer),
         "tools": [{"name": r["name"], "args": r["args"], "data": r["data"]} for r in results],

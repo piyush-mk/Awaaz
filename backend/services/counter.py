@@ -1056,26 +1056,30 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
         db.commit()
         announce_cart(db, cart, transcript=transcript, source=ctx.source, stage="rules")
 
-    # 2. LLM tool calling, reconciled over the rules result
+    # 2. LLM tool calling, only when the rules did not fully understand. Exact quantities from the tested
+    # parser must not be overwritten by a slower model guess (it has returned 4 Surf for "ek Surf").
+    rules_sure = (bool(rule_calls) and not out.errors and not out.unmatched
+                  and any(canon(c.name) != "missed_sale" for c in rule_calls))
     llm_calls: Optional[list[ToolCall]] = None
     llm_text = ""
     final_source = ctx.source
     latency = 0
-    try:
-        res = await asyncio.wait_for(
-            llm.complete_or_rules(build_messages(db, cart, index, transcript, context), db,
-                                  tools=TOOLS, context=context, timeout=4.0), timeout=5.5)
-        if res.source in ("sarvam", "paytm"):
-            if res.data.tool_calls:
-                llm_calls = [ToolCall("restock" if context == "stock" and canon(c.name) == "add_to_cart"
-                                      else canon(c.name), c.arguments or {}, c.id)
-                             for c in res.data.tool_calls if c.name]
-            elif res.data.content:
-                llm_text = res.data.content
-            if llm_calls is not None or llm_text:
-                final_source, latency = res.source, res.latency_ms
-    except Exception as exc:  # noqa: BLE001  (timeout, LLMUnavailable, bad shape): keep rules result
-        log.info("llm path skipped: %s", exc.__class__.__name__)
+    if transcript.strip() and not rules_sure:
+        try:
+            res = await asyncio.wait_for(
+                llm.complete_or_rules(build_messages(db, cart, index, transcript, context), db,
+                                      tools=TOOLS, context=context, timeout=4.0), timeout=5.5)
+            if res.source in ("sarvam", "paytm"):
+                if res.data.tool_calls:
+                    llm_calls = [ToolCall("restock" if context == "stock" and canon(c.name) == "add_to_cart"
+                                          else canon(c.name), c.arguments or {}, c.id)
+                                 for c in res.data.tool_calls if c.name]
+                elif res.data.content:
+                    llm_text = res.data.content
+                if llm_calls is not None or llm_text:
+                    final_source, latency = res.source, res.latency_ms
+        except Exception as exc:  # noqa: BLE001  (timeout, LLMUnavailable, bad shape): keep rules result
+            log.info("llm path skipped: %s", exc.__class__.__name__)
     ctx.source, ctx.latency_ms = final_source, latency
 
     if llm_calls is not None:
@@ -1107,6 +1111,7 @@ async def run_utterance(db: Session, *, session_id: str, transcript: str, contex
             apply_other(ctx, ToolCall("missed_sale", {"product": name}), out)
 
     cart_changed = list(cart.lines or []) != snapshot
+    out.spoken = list(dict.fromkeys(out.spoken))
     if context == "ask" and not out.spoken:
         out.spoken.append("Abhi is sawaal ka jawab nahi de sakta. Sarvam key judte hi bata paunga.")
     spoken = compose_spoken(db, ctx, out, cart_changed)

@@ -13,7 +13,7 @@ from typing import Optional
 
 from config import settings
 from services import sarvam
-from services.types import ProviderError, Source
+from services.types import Source
 
 CACHE_SUBDIR = "tts"
 URL_PREFIX = "/api/voice/tts"  # served by routers/voice.py
@@ -63,7 +63,7 @@ async def get_speech(text: str, language: str = "hi-IN", speaker: Optional[str] 
         return Speech("", None, key, False, "fixture", 0)
     try:
         result = await sarvam.tts(spoken, language=language, speaker=speaker, pace=pace)
-    except ProviderError:
+    except Exception:  # API errors and network drops alike: the browser voice takes over
         return Speech("", None, key, False, "fixture", 0)
     audio_b64 = result.data
     if not audio_b64:

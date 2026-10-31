@@ -93,6 +93,30 @@ async def test_stt_failure_falls_back_to_fixture(live):
     assert r.source == "fixture" and r.data["transcript"] == fixtures.DEMO_PHRASES["4"]
 
 
+@pytest.mark.anyio
+async def test_stt_failure_never_invents_an_order(live):
+    mock(lambda req: httpx.Response(500, text="boom"))
+    r = await sarvam.stt(b"x", "a.webm")
+    assert r.source == "failed" and r.data["transcript"] == ""
+
+
+@pytest.mark.anyio
+async def test_stt_keyterms_only_on_models_that_accept_them(live, monkeypatch):
+    seen = []
+
+    def handler(req: httpx.Request):
+        seen.append((req.content, req.headers.get("content-type", "")))
+        return httpx.Response(200, json={"transcript": "ok"})
+
+    mock(handler)
+    monkeypatch.setattr(sarvam, "settings", dataclasses.replace(sarvam.settings, sarvam_stt_model="saaras:v3"))
+    await sarvam.stt(b"x", "a.webm", keyterms=["Maggi"])
+    monkeypatch.setattr(sarvam, "settings", dataclasses.replace(sarvam.settings, sarvam_stt_model="saaras:v4"))
+    await sarvam.stt(b"x", "a.webm", keyterms=["Maggi"])
+    assert b"keyterms" not in seen[0][0] and b"keyterms" in seen[1][0]
+    assert b"audio/webm" in seen[0][0]
+
+
 # --- TTS ---
 
 @pytest.mark.anyio

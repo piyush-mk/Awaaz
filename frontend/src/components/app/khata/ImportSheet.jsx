@@ -43,6 +43,7 @@ export default function ImportSheet({ proposal, onClose, onDone }) {
             <span className="text-sm text-ink-3">{rows.length} entry mili</span>
             <SourceChip source={proposal.source} latency={proposal.latency_ms} demo={proposal.source === 'fixture'} />
           </div>
+          {rows.length === 0 && <p className="font-hindi text-lg">Is photo mein koi entry padh nahi paya. Saaf roshni mein doosri photo lein.</p>}
           <ul className="space-y-2">
             {rows.map((r, i) => (
               <li key={i} className={`rounded-2xl bg-bg-app p-3 ${r.include ? '' : 'opacity-50'}`}>
@@ -70,14 +71,15 @@ export default function ImportSheet({ proposal, onClose, onDone }) {
               </li>
             ))}
           </ul>
-          <ConfirmCard
+          {rows.length === 0 && <Btn variant="navy" className="w-full" onClick={onClose}>Theek hai</Btn>}
+          {rows.length > 0 && <ConfirmCard
             question={`${included.length} entry jodun? Kul ${inr(total)}`}
             busy={busy || included.length === 0}
             onYes={confirm}
             onNo={onClose}
             yesLabel="Haan, jodo"
             tone="orange"
-          />
+          />}
         </div>
       )}
     </Sheet>

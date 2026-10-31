@@ -122,6 +122,14 @@ export default function BillScanTab() {
     )
   }
 
+  if (!bill.lines?.length) {
+    return (
+      <Empty icon={FileText} hi="Is photo mein bill padh nahi paya" en="Poora bill frame mein rakhein, saaf roshni mein">
+        <PhotoButton variant="blue" busy={busy} label="Doosri photo" onFiles={scan} />
+      </Empty>
+    )
+  }
+
   const warnings = (bill.flags || []).filter((f) => f.severity !== 'info')
   return (
     <div className="space-y-3">

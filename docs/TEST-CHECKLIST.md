@@ -21,7 +21,7 @@ Test on the deployed HTTPS site with a real phone. Microphone and camera do not 
 | 0f | `/status` | Sarvam live, models show `saaras:v4` and `bulbul:v4-flash` |
 | 0g | Listen to any spoken reply | New voice is clear and says rupee amounts naturally. Tell me if you prefer another voice |
 
-The steps below use the Hindi-mode Hinglish names from earlier builds; in English mode the same buttons read Make bill, Yes, Got paid and so on.
+Button names below are written in Latin letters. Bill banao is बिल बनाओ in Hindi and Make bill in English; Haan is हां and Yes; Paisa mila is पैसा मिला and Got paid. Phrases in quotes are what you say aloud, in either language.
 
 ## 1. Counter
 
